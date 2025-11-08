@@ -177,7 +177,7 @@ MFTP uses Meshtastic direct messages with a simple command protocol:
 ### Other Limitations
 
 - **No authentication**: Anyone on the mesh can access served files
-- **No encryption**: Files transferred in plaintext (base64 encoded)
+- **No encryption**: Files transferred in plaintext (base64 encoded). I don't fully understand if/how Meshtastic encrypts DMs so send at your own risk!
 - **No compression**: Files sent as-is, no size optimization - compress your files first
 - **No directory browsing**: Only serves files from one directory
 - **No file deletion**: Server directory is read-only
