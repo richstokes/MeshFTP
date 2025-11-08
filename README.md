@@ -70,7 +70,7 @@ uv run mftp-client -s <server-node-id> [-d <download-directory>]
 
 **Options:**
 
-- `-s, --server` (required): Server node ID (e.g., `!abcd1234` or `abcd1234`)
+- `-s, --server` (required): Server node ID to connect to (e.g., `!abcd1234` or `abcd1234`)
 - `-d, --directory` (optional): Download directory (default: `~/Downloads/MFTP`)
 
 **Example:**
