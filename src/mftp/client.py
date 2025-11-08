@@ -481,7 +481,7 @@ class ConfirmOverwriteScreen(ModalScreen[bool]):
 
     #dialog {
         width: 60;
-        height: 9;
+        height: auto;
         border: thick $background 80%;
         background: $surface;
         padding: 1 2;
