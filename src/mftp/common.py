@@ -51,6 +51,26 @@ class MeshtasticConnection:
         self.device_info: Optional[DeviceInfo] = None
 
     @staticmethod
+    def _is_likely_meshtastic_serial(port) -> bool:
+        """Check if a serial port is likely a Meshtastic device.
+
+        Args:
+            port: Serial port info from list_ports.comports()
+
+        Returns:
+            True if port matches Meshtastic device patterns.
+        """
+        # Common USB serial chips used by Meshtastic devices
+        if any(vid in str(port.vid) for vid in ["10c4", "1a86", "0403", "239a"]):
+            return True
+        if any(
+            name in port.description.lower()
+            for name in ["cp210", "ch340", "usb serial", "meshtastic"]
+        ):
+            return True
+        return False
+
+    @staticmethod
     async def discover_devices() -> list[DeviceInfo]:
         """Discover available Meshtastic devices via Serial and BLE.
 
@@ -62,14 +82,7 @@ class MeshtasticConnection:
         # Discover serial devices
         serial_ports = list_ports.comports()
         for port in serial_ports:
-            # Filter for likely Meshtastic devices
-            # Common USB serial chips used by Meshtastic devices
-            if any(
-                vid in str(port.vid) for vid in ["10c4", "1a86", "0403", "239a"]
-            ) or any(
-                name in port.description.lower()
-                for name in ["cp210", "ch340", "usb serial", "meshtastic"]
-            ):
+            if MeshtasticConnection._is_likely_meshtastic_serial(port):
                 devices.append(
                     DeviceInfo(
                         name=port.description or port.device,
@@ -273,83 +286,48 @@ class DeviceSelectionApp(App):
         self.serial_devices = []
         self.ble_devices = []
 
-        # Scan for serial devices
-        status.update("🔍 Scanning for serial devices...")
-        self.refresh()  # Force UI update
-        await asyncio.sleep(0.05)  # Give UI time to update
-
-        serial_ports = list_ports.comports()
-        serial_count = 0
-        for port in serial_ports:
-            # Filter for likely Meshtastic devices
-            if any(
-                vid in str(port.vid) for vid in ["10c4", "1a86", "0403", "239a"]
-            ) or any(
-                name in port.description.lower()
-                for name in ["cp210", "ch340", "usb serial", "meshtastic"]
-            ):
-                device = DeviceInfo(
-                    name=port.description or port.device,
-                    connection_type=ConnectionType.SERIAL,
-                    address=port.device,
-                )
-                self.serial_devices.append(device)
-                self.serial_list.append(ListItem(Label(str(device))))
-                serial_count += 1
-
-        if serial_count == 0:
-            self.serial_list.append(ListItem(Label("(No serial devices found)")))
-
-        status.update(f"✓ Found {serial_count} serial device(s), scanning BLE...")
+        # Show scanning status
+        status.update("🔍 Scanning for devices...")
         self.refresh()
         await asyncio.sleep(0.05)
 
-        # Scan for BLE devices
-        status.update("📡 Scanning for BLE devices (this may take a few seconds)...")
-        self.refresh()
-        await asyncio.sleep(0.05)
-
+        # Use the consolidated discovery method
         try:
-            ble_devices = await BleakScanner.discover(timeout=5.0)
-            # Sort by signal strength (RSSI) - strongest first (highest/least negative value)
-            sorted_ble = sorted(
-                ble_devices, key=lambda d: d.rssi if d.rssi else -999, reverse=True
-            )
-            ble_count = 0
-            for ble_device in sorted_ble:
-                if ble_device.name:
-                    device = DeviceInfo(
-                        name=ble_device.name,
-                        connection_type=ConnectionType.BLE,
-                        address=ble_device.address,
-                    )
+            devices = await MeshtasticConnection.discover_devices()
+
+            # Separate devices by type
+            for device in devices:
+                if device.connection_type == ConnectionType.SERIAL:
+                    self.serial_devices.append(device)
+                    self.serial_list.append(ListItem(Label(str(device))))
+                elif device.connection_type == ConnectionType.BLE:
                     self.ble_devices.append(device)
                     self.ble_list.append(ListItem(Label(str(device))))
-                    ble_count += 1
 
-                    # Update status every few devices
-                    if ble_count % 5 == 0:
-                        status.update(f"📡 Scanning BLE... found {ble_count} device(s)")
-                        self.refresh()
-                        await asyncio.sleep(0.05)
-
-            if ble_count == 0:
+            # Add placeholder messages if no devices found
+            if not self.serial_devices:
+                self.serial_list.append(ListItem(Label("(No serial devices found)")))
+            if not self.ble_devices:
                 self.ble_list.append(ListItem(Label("(No BLE devices found)")))
 
-        except Exception as e:
-            status.update(f"⚠ BLE scan error: {e}")
-            self.ble_list.append(ListItem(Label(f"(Error: {e})")))
-            self.refresh()
-            await asyncio.sleep(0.05)
+            # Update final status
+            serial_count = len(self.serial_devices)
+            ble_count = len(self.ble_devices)
+            total = serial_count + ble_count
 
-        # Final status
-        total = serial_count + len(self.ble_devices)
-        if total > 0:
-            status.update(
-                f"✓ Scan complete: {serial_count} serial, {len(self.ble_devices)} BLE"
-            )
-        else:
-            status.update("⚠ No devices found. Try refreshing or check connections.")
+            if total > 0:
+                status.update(
+                    f"✓ Scan complete: {serial_count} serial, {ble_count} BLE"
+                )
+            else:
+                status.update(
+                    "⚠ No devices found. Try refreshing or check connections."
+                )
+
+        except Exception as e:
+            status.update(f"⚠ Scan error: {e}")
+            self.serial_list.append(ListItem(Label("(No serial devices found)")))
+            self.ble_list.append(ListItem(Label(f"(Error: {e})")))
 
         self.refresh()
 
