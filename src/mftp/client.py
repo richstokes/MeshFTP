@@ -84,47 +84,45 @@ class FileTransferClient:
         self.on_error_message = None
         self.on_checksum_result = None
 
-        # Subscribe to telemetry updates to track channel utilization
-        pub.subscribe(self._on_telemetry_receive, "meshtastic.receive.telemetry")
-
     def set_loop(self, loop: asyncio.AbstractEventLoop):
         """Provide the asyncio loop so we can set events from other threads safely."""
         self.loop = loop
 
-    def _on_telemetry_receive(self, packet, interface):
-        """Handle telemetry packets to track channel utilization."""
+    def get_current_channel_utilization(self) -> float:
+        """Get current channel utilization from the local node's cached data.
+
+        Returns:
+            Current channel utilization percentage (0-100), or cached value if unavailable.
+        """
         try:
-            if "decoded" not in packet:
-                return
+            # Try to get deviceMetrics from the local node (nodesByNum entries are dicts)
+            if not self.interface.myInfo or not self.interface.nodesByNum:
+                return self.channel_utilization
 
-            decoded = packet["decoded"]
-            if "telemetry" not in decoded:
-                return
+            my_node_num = self.interface.myInfo.my_node_num
+            node = self.interface.nodesByNum.get(my_node_num)
+            if node:
+                device_metrics = node.get("deviceMetrics", {})
+                if isinstance(device_metrics, dict):
+                    channel_util = device_metrics.get("channelUtilization")
+                else:
+                    channel_util = None
 
-            telemetry = decoded["telemetry"]
-
-            # Check for channel utilization in deviceMetrics
-            if "deviceMetrics" in telemetry:
-                device_metrics = telemetry["deviceMetrics"]
-                if "channelUtilization" in device_metrics:
-                    self.channel_utilization = device_metrics["channelUtilization"]
-                    self._debug_log(
-                        f"Channel utilization updated: {self.channel_utilization:.1f}%"
-                    )
-
-            # Also check localStats for more detailed info
-            elif "localStats" in telemetry:
-                local_stats = telemetry["localStats"]
-                if "channelUtilization" in local_stats:
-                    self.channel_utilization = local_stats["channelUtilization"]
-                    self._debug_log(
-                        f"Channel utilization updated: {self.channel_utilization:.1f}%"
-                    )
-
+                if channel_util is not None:
+                    if channel_util != self.channel_utilization:
+                        self.channel_utilization = channel_util
+                        self._debug_log(
+                            f"Channel utilization updated: {channel_util:.1f}%"
+                        )
+                    return channel_util
         except Exception as e:
-            # Don't let telemetry errors break the main flow
             if self.debug:
-                self._debug_log(f"Error processing telemetry: {e}")
+                self._debug_log(
+                    f"Error reading channel utilization from node data: {e}"
+                )
+
+        # Return cached value
+        return self.channel_utilization
 
     def get_adaptive_delay(self) -> float:
         """Calculate delay based on current channel utilization.
@@ -372,6 +370,9 @@ class FileTransferClient:
                     f"after {max_retries} attempts"
                 )
                 return False
+
+            # Get current channel utilization from local node's cached data
+            self.get_current_channel_utilization()
 
             # Apply adaptive delay based on channel utilization
             adaptive_delay = self.get_adaptive_delay()
@@ -851,6 +852,8 @@ class MFTPClientApp(App):
         """Refresh the file list."""
         self.add_debug_log("Refreshing file list...")
         self.status_text = "Refreshing file list..."
+        # Refresh cached channel utilization so adaptive delay stays current during manual refreshes
+        self.client.get_current_channel_utilization()
         self.client.request_file_list()
 
     def _start_download(self, filename: str, total_chunks: int) -> None:
