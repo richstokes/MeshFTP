@@ -473,6 +473,8 @@ class MFTPClientApp(App):
         margin: 1 2;
         border: solid $primary;
         padding: 1;
+        width: 100%;
+        layout: vertical;
     }
     
     #progress-label {
@@ -482,6 +484,7 @@ class MFTPClientApp(App):
     
     #progress-bar {
         height: 3;
+        width: 100%;
     }
     
     #progress-bar > #bar {
