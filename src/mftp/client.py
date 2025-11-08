@@ -176,7 +176,7 @@ class FileTransferClient:
                             "filename": filename,
                             "md5_hash": md5_hash,
                         }
-                        self._debug_log(f"Checksum received: {md5_hash}")
+                        # self._debug_log(f"Checksum received: {md5_hash}")
                         if self.loop:
                             self.loop.call_soon_threadsafe(self.checksum_event.set)
                         else:
@@ -407,7 +407,7 @@ class ConfirmOverwriteScreen(ModalScreen[bool]):
 class MFTPClientApp(App):
     """Textual TUI for MFTP Client."""
 
-    TITLE = "MFTP Client"
+    TITLE = "MeshFTP Client"
 
     CSS = """
     Screen {
@@ -547,13 +547,13 @@ class MFTPClientApp(App):
     def compose(self) -> ComposeResult:
         """Compose the UI."""
         yield Header()
-        yield Static(f"MFTP Client - Server: {self.server_id}", id="title")
+        yield Static(f"MeshFTP Client - Server: {self.server_id}", id="title")
         yield Static("Connecting...", id="status")
 
         with Horizontal(id="main-container"):
             # Left panel - file list and controls
             with Vertical(id="left-panel"):
-                yield Static("📁 Available Files:", classes="section-title")
+                yield Static("Available Files:", classes="section-title")
                 yield DataTable(id="file-table")
                 yield Container(
                     Button("Refresh List", variant="primary", id="refresh-btn"),
@@ -633,7 +633,7 @@ class MFTPClientApp(App):
                     size_str,
                 )
 
-            self.status_text = f"✓ {len(file_list)} file(s) available"
+            self.status_text = f"{len(file_list)} file(s) available"
 
         self._safe_call(_update)
         self.add_debug_log(f"File list updated: {len(file_list)} files")
@@ -737,7 +737,7 @@ class MFTPClientApp(App):
         self.downloading = False
 
         if success:
-            self.status_text = f"✅ Downloaded: {filename}"
+            self.status_text = f"Downloaded: {filename}"
 
             # Use Rich markup for styling
             def _log():
@@ -746,7 +746,7 @@ class MFTPClientApp(App):
 
             self._safe_call(_log)
         else:
-            self.status_text = f"✗ Download failed: {filename}"
+            self.status_text = f"Download failed: {filename}"
             self.add_error_log(f"Download failed: {filename}")
 
         # Hide progress bar after a delay
@@ -806,7 +806,7 @@ async def main_async():
     """Main entry point for MFTP TUI client."""
     # Parse command line arguments
     parser = argparse.ArgumentParser(
-        description="MFTP TUI Client - Meshtastic File Transfer Protocol Client"
+        description="MeshFTP TUI Client - Meshtastic File Transfer Protocol Client"
     )
     parser.add_argument(
         "-s",
@@ -853,7 +853,7 @@ async def main_async():
         print(f"Error: Failed to create download directory '{download_dir}': {e}")
         sys.exit(1)
 
-    print("MFTP TUI Client - Meshtastic File Transfer Protocol")
+    print("MeshFTP TUI Client - Meshtastic File Transfer Protocol")
     print("=" * 50)
     print(f"Server: {server_id}")
     print(f"Download directory: {download_dir}")
