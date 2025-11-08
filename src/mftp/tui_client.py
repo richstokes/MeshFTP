@@ -22,7 +22,7 @@ from textual.widgets import (
     Button,
     DataTable,
     ProgressBar,
-    Log,
+    RichLog,
     Label,
 )
 from textual.reactive import reactive
@@ -569,7 +569,9 @@ class MFTPClientApp(App):
             # Right panel - debug log
             with Vertical(id="right-panel"):
                 yield Static("🔍 Debug Log:", classes="section-title")
-                yield Log(id="debug-log", highlight=True, auto_scroll=True)
+                yield RichLog(
+                    id="debug-log", highlight=True, markup=True, auto_scroll=True
+                )
 
         yield Footer()
 
@@ -652,8 +654,8 @@ class MFTPClientApp(App):
         """Add message to debug log."""
 
         def _log():
-            log = self.query_one("#debug-log", Log)
-            log.write_line(message)
+            log = self.query_one("#debug-log", RichLog)
+            log.write(message)
 
         self._safe_call(_log)
 
@@ -661,12 +663,9 @@ class MFTPClientApp(App):
         """Add error message to debug log."""
 
         def _log():
-            log = self.query_one("#debug-log", Log)
-            # Use Rich Text object for proper styling in Textual Log widget
-            from rich.text import Text
-
-            error_text = Text(message, style="bold red")
-            log.write(error_text)
+            log = self.query_one("#debug-log", RichLog)
+            # Use Rich markup for styling
+            log.write(f"[bold red]{message}[/bold red]")
 
         self._safe_call(_log)
 
@@ -675,13 +674,10 @@ class MFTPClientApp(App):
     ):
         """Show checksum validation result."""
         if valid:
-            # Use Rich Text object for proper styling
-            from rich.text import Text
-
+            # Use Rich markup for styling
             def _log():
-                log = self.query_one("#debug-log", Log)
-                success_text = Text(f"Checksum valid: {local_hash}", style="bold green")
-                log.write(success_text)
+                log = self.query_one("#debug-log", RichLog)
+                log.write(f"[bold green]Checksum valid: {local_hash}[/bold green]")
 
             self._safe_call(_log)
         else:
@@ -735,15 +731,11 @@ class MFTPClientApp(App):
 
         if success:
             self.status_text = f"✅ Downloaded: {filename}"
-            # Use Rich Text object for proper styling
-            from rich.text import Text
 
+            # Use Rich markup for styling
             def _log():
-                log = self.query_one("#debug-log", Log)
-                success_text = Text(
-                    f"Download complete: {filename}", style="bold green"
-                )
-                log.write(success_text)
+                log = self.query_one("#debug-log", RichLog)
+                log.write(f"[bold green]Download complete: {filename}[/bold green]")
 
             self._safe_call(_log)
         else:

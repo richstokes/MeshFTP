@@ -268,7 +268,7 @@ def main():
     """Main entry point for MFTP server."""
     # Parse command line arguments
     parser = argparse.ArgumentParser(
-        description="MFTP Server - Meshtastic File Transfer Protocol Server"
+        description="MeshFTP Server - Meshtastic File Transfer Protocol Server"
     )
     parser.add_argument(
         "-d",
@@ -289,8 +289,7 @@ def main():
         logger.error(f"'{serve_dir}' is not a directory")
         sys.exit(1)
 
-    logger.info("MFTP Server - Meshtastic File Transfer Protocol")
-    logger.info(f"Serving files from: {serve_dir}")
+    logger.info("MeshFTP Server - Meshtastic File Transfer Protocol")
 
     # Prepare files by chunking them
     chunked_files = prepare_files(serve_dir)
@@ -318,7 +317,7 @@ def main():
         logger.info(f"Server Node ID: !{my_node_id_hex}")
         logger.info(f"Connect a client with: uv run mftp-client -s {my_node_id_hex}")
 
-        logger.info("MFTP Server is listening for file requests")
+        logger.info("MeshFTP Server is listening for file requests")
         logger.info("Commands: !ls, !req <filename> <chunk>, !check <filename>")
         logger.info("Press Ctrl+C to exit")
 

@@ -62,6 +62,8 @@ On startup, the server will:
 
 ### Client
 
+There are two ways to run the client: interactive TUI mode or command-line mode. The TUI mode is recommended for ease of use. To use the TUI client, run: `mftp-tui` instead of `mftp-client` in the commands below.
+
 Download files from a server node:
 
 ```bash
@@ -105,7 +107,7 @@ MFTP uses Meshtastic direct messages with a simple command protocol:
 **Client → Server:**
 
 - `!ls` - Request file list
-- `!req <filename> <chunk_number>` - Request specific chunk (0-based internally)
+- `!req <filename> <chunk_number>` - Request specific chunk
 - `!check <filename>` - Request file checksum
 
 **Server → Client:**
@@ -120,9 +122,9 @@ MFTP uses Meshtastic direct messages with a simple command protocol:
 1. Client sends `!ls` to request file list
 2. Server responds with JSON containing available files
 3. Client displays files and user selects one
-4. Client requests chunks sequentially with 20-second timeout
+4. Client requests chunks sequentially with 30-second timeout
 5. Server sends each chunk as base64-encoded data
-6. Client retries failed chunks up to 5 times
+6. Client retries failed chunks up to 5 times with exponential backoff
 7. After all chunks received, client reassembles and saves file
 8. Client requests checksum and validates downloaded file
 9. Transfer complete if checksum matches
@@ -147,6 +149,7 @@ MFTP uses Meshtastic direct messages with a simple command protocol:
   - With 10-char filenames, only 4 files fit in JSON list
   - Excess files are ignored with a warning message
   - May implement pagination for larger file lists in future
+  - In practical terms, it works best with just a few small files in a dedicated directory
 
 ### Network Constraints
 
@@ -159,10 +162,6 @@ MFTP uses Meshtastic direct messages with a simple command protocol:
   - Mesh network adds latency for multi-hop routes
   - Expect minutes for small files, longer for large files
 
-- **No resume capability**: 
-  - If transfer fails, must restart from beginning
-  - No partial file recovery
-
 - **Sequential chunks only**:
   - Chunks must be downloaded in order
   - No parallel chunk downloads
@@ -170,7 +169,7 @@ MFTP uses Meshtastic direct messages with a simple command protocol:
 
 ### Reliability
 
-- **Retry logic**: 5 attempts per chunk with 20-second timeout
+- **Retry logic**: 5 attempts per chunk with 30-second timeout and exponential backoff
 - **Checksum validation**: MD5 hash verification after download
 - **Packet deduplication**: Handles mesh network rebroadcasts
 - **No guaranteed delivery**: Mesh networks are unreliable
@@ -189,4 +188,4 @@ MFTP uses Meshtastic direct messages with a simple command protocol:
 
 - **Keep filenames short** (10 chars or less, including extension)
 - **Serve only a few files** (4 maximum) at a time
-- **Use small files** for faster transfers
+- **Use small files** for realistic transfers
