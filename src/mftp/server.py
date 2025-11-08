@@ -150,18 +150,20 @@ def on_receive(packet, interface, file_chunks: dict[str, FileInfo]):
     """
     try:
         # Deduplicate packets - mesh can rebroadcast DMs and we see them multiple times
+        # Only deduplicate when packet has a valid ID
         packet_id = packet.get("id")
-        if packet_id in processed_packets:
-            return  # Already processed this packet
-        processed_packets.add(packet_id)
+        if packet_id is not None:
+            if packet_id in processed_packets:
+                return  # Already processed this packet
+            processed_packets.add(packet_id)
 
-        # Limit the size of the processed_packets set to avoid memory issues
-        # Remove oldest half when we hit the limit
-        if len(processed_packets) > 1000:
-            # Convert to list, remove first half, convert back to set
-            packet_list = list(processed_packets)
-            processed_packets.clear()
-            processed_packets.update(packet_list[500:])
+            # Limit the size of the processed_packets set to avoid memory issues
+            # Remove oldest half when we hit the limit
+            if len(processed_packets) > 1000:
+                # Convert to list, remove first half, convert back to set
+                packet_list = list(processed_packets)
+                processed_packets.clear()
+                processed_packets.update(packet_list[500:])
 
         # Check if this is a text message
         if "decoded" in packet:
