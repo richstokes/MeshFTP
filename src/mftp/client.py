@@ -45,10 +45,17 @@ class FileTransferClient:
         try:
             if self.debug:
                 print(
-                    f"  [DEBUG] Packet received: {packet.get('fromId')} -> {packet.get('toId')}"
+                    f"  [DEBUG] Packet received: fromId={packet.get('fromId')}, from={packet.get('from')}, toId={packet.get('toId')}, to={packet.get('to')}"
                 )
-                if "decoded" in packet and "text" in packet["decoded"]:
-                    print(f"  [DEBUG] Text content: {packet['decoded']['text'][:80]}")
+                if "decoded" in packet:
+                    decoded = packet["decoded"]
+                    print(f"  [DEBUG] Decoded keys: {list(decoded.keys())}")
+                    if "text" in decoded:
+                        print(f"  [DEBUG] Text content: {decoded['text'][:80]}")
+                    else:
+                        print(f"  [DEBUG] No 'text' field in decoded")
+                else:
+                    print(f"  [DEBUG] No 'decoded' field in packet")
 
             if "decoded" in packet and "text" in packet["decoded"]:
                 text = packet["decoded"]["text"]
@@ -60,12 +67,16 @@ class FileTransferClient:
                     from_num = packet.get("from")
                     if from_num:
                         from_id = f"!{from_num:08x}"
+                        if self.debug:
+                            print(
+                                f"  [DEBUG] Converted numeric ID {from_num} to {from_id}"
+                            )
 
                 # Skip if from_id is None (shouldn't happen but can occur)
                 if from_id is None:
                     if self.debug:
                         print(f"  [DEBUG] Skipping packet with None fromId/from")
-                        print(f"  [DEBUG] Packet keys: {packet.keys()}")
+                        print(f"  [DEBUG] Packet keys: {list(packet.keys())}")
                     return
 
                 # Normalize from_id - add ! if not present

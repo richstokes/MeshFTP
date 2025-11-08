@@ -1,17 +1,17 @@
-# MeshTP - Meshtastic File Transfer Protocol
+# MeshFTP - Meshtastic File Transfer Protocol
 
 A simple file transfer system for Meshtastic mesh networks, enabling file sharing between nodes over long-range radio links.
 
 ## Overview
 
-MeshTP consists of two components:
+MeshFTP consists of two components:
 
 - **Server**: Serves files from a directory to other mesh nodes
 - **Client**: Downloads files from a server node on the mesh network
 
 Files are chunked, base64-encoded, and transferred over Meshtastic direct messages (DMs) with automatic retry logic and MD5 checksum validation.
 
-MeshTP is designed for small files due to Meshtastic's low bandwidth and DM size limitations. It is ideal for sharing text files, small images, or configuration files in remote areas without internet access. Be kind, remember everyone's bandwidth is limited and transferring large files may impact other users on the mesh.
+MeshFTP is designed for small files due to Meshtastic's low bandwidth and DM size limitations. It is ideal for sharing text files, small images, or configuration files in remote areas without internet access. Be kind, remember everyone's bandwidth is limited and transferring large files may impact other users on the mesh.
 
 ## Installation
 

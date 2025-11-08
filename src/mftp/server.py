@@ -182,7 +182,7 @@ def on_receive(packet, interface, file_chunks: dict[str, FileInfo]):
 
                 # Only debug print DMs to this node
                 if is_dm:
-                    print(f"\n📨 DM from {from_id}: '{text}'")
+                    print(f"\n  DM from {from_id}: '{text}'")
 
                     # Check if message starts with command prefix
                     text_stripped = text.strip()
