@@ -23,8 +23,6 @@ gh repo clone richstokes/MeshFTP
 cd MeshFTP
 
 # Install dependencies
-
-```bash
 uv sync
 ```
 
