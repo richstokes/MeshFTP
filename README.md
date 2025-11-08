@@ -185,3 +185,4 @@ MFTP uses Meshtastic direct messages with a simple command protocol:
 - **Keep filenames short** (10 chars or less, including extension)
 - **Serve only a few files** (4 maximum) at a time
 - **Use small files** for realistic transfers
+- **Encrypt files first** if privacy is a concern
