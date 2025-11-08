@@ -19,10 +19,12 @@ Install using `uv`:
 
 ```bash
 # Clone the repository
-git clone <repository-url>
+gh repo clone richstokes/MeshFTP
 cd MeshFTP
 
 # Install dependencies
+
+```bash
 uv sync
 ```
 
