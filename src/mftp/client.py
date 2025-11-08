@@ -131,10 +131,11 @@ class FileTransferClient:
 
         Returns:
             Delay in seconds based on channel utilization:
-            - 0-25%: 2 seconds
+            - 0-10%: 2 seconds
+            - 10-25%: 5 seconds
             - 25-50%: 10 seconds
             - 50-75%: 30 seconds
-            - 75-100%: 60 seconds
+            - 75%+: 60 seconds
         """
         ch_util = self.channel_utilization
 
@@ -144,8 +145,10 @@ class FileTransferClient:
             return 30.0
         elif ch_util >= 25:
             return 10.0
+        elif ch_util >= 10:
+            return 5.0
         else:
-            return 2.0
+            return 2.0  # Minimal delay when channel is ~clear
 
     def request_file_list(self):
         """Request file list from server."""
