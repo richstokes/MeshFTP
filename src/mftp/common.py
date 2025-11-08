@@ -189,6 +189,8 @@ class MeshtasticConnection:
 class DeviceSelectionApp(App):
     """Textual TUI for selecting a Meshtastic device."""
 
+    TITLE = "MeshFTP - Device Selection"
+
     CSS = """
     Screen {
         background: $surface;

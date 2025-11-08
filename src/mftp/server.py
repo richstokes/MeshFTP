@@ -6,7 +6,6 @@ import hashlib
 import json
 import sys
 import time
-import traceback
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -27,9 +26,6 @@ MAX_FILENAME_LENGTH = 10
 # Maximum number of files to serve (limited by 200-byte DM payload for !ls response)
 # With max 10-char filenames and no size field, we can fit 4 files in 200 bytes
 MAX_FILE_COUNT = 4
-
-# Storage for chunked files
-file_chunks = {}
 
 
 @dataclass

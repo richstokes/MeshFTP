@@ -7,14 +7,12 @@ import hashlib
 import random
 import sys
 import threading
-import time
 from pathlib import Path
-from typing import Optional
 
 from pubsub import pub
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Container, Vertical, Horizontal, Center, Middle
+from textual.containers import Container, Vertical, Horizontal
 from textual.screen import ModalScreen
 from textual.widgets import (
     Header,
@@ -561,7 +559,6 @@ class MFTPClientApp(App):
     status_text = reactive("Initializing...")
     progress_current = reactive(0)
     progress_total = reactive(100)
-    progress_visible = reactive(False)
 
     def __init__(
         self,
