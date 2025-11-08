@@ -50,7 +50,7 @@ class FileTransferClient:
         self.checksum_response = None
         self.checksum_event = asyncio.Event()
         self.loop: asyncio.AbstractEventLoop | None = None
-        
+
         # Callback for UI updates
         self.on_file_list_update = None
         self.on_chunk_received = None
@@ -64,15 +64,17 @@ class FileTransferClient:
 
     def request_file_list(self):
         """Request file list from server."""
-        self._debug_log("📡 Requesting file list from server...")
+        self._debug_log("Requesting file list from server...")
         self.interface.sendText("!ls", destinationId=self.server_id)
 
     def on_receive(self, packet, interface):
         """Handle received messages."""
         try:
             # Always log that we got a packet (not just in debug mode)
-            self._debug_log(f"📨 Packet received from {packet.get('fromId') or packet.get('from')}")
-            
+            self._debug_log(
+                f"Packet received from {packet.get('fromId') or packet.get('from')}"
+            )
+
             if self.debug:
                 self._debug_log(
                     f"Packet received: fromId={packet.get('fromId')}, "
@@ -92,7 +94,7 @@ class FileTransferClient:
 
             if "decoded" in packet and "text" in packet["decoded"]:
                 text = packet["decoded"]["text"]
-                self._debug_log(f"📝 Text message received: {text[:80]}...")
+                # self._debug_log(f"Text message received: {text[:80]}...") # for debugging
 
                 # Get from_id - try string ID first, then fall back to numeric ID
                 from_id = packet.get("fromId")
@@ -103,7 +105,7 @@ class FileTransferClient:
                         self._debug_log(f"Converted numeric ID {from_num} to {from_id}")
 
                 if from_id is None:
-                    self._debug_log("⚠ Skipping packet with None fromId/from")
+                    self._debug_log("Skipping packet with None fromId/from")
                     return
 
                 # Normalize from_id
@@ -112,33 +114,34 @@ class FileTransferClient:
                 )
 
                 self._debug_log(
-                    f"🔍 Checking: from={normalized_from_id}, expected={self.server_id}, match={normalized_from_id == self.server_id}"
+                    f"Checking: from={normalized_from_id}, expected={self.server_id}, match={normalized_from_id == self.server_id}"
                 )
 
                 # Only process messages from our server
                 if normalized_from_id != self.server_id:
-                    self._debug_log(f"❌ Filtered out (not from server)")
+                    self._debug_log(f"Filtered out (not from server)")
                     return
-                
-                self._debug_log(f"✅ Message from server accepted!")
+
+                self._debug_log(f"Message from server accepted!")
 
                 # Handle file list response (JSON)
                 if text.startswith("{"):
-                    self._debug_log(f"📋 Parsing JSON response: {text[:100]}...")
+                    self._debug_log(f"Parsing JSON response: {text[:100]}...")
                     try:
                         import json
+
                         data = json.loads(text)
-                        self._debug_log(f"✓ JSON parsed, keys: {list(data.keys())}")
+                        self._debug_log(f"JSON parsed, keys: {list(data.keys())}")
                         if "files" in data:
                             self.file_list = data["files"]
                             self._debug_log(
-                                f"✓ Received file list: {len(self.file_list)} files"
+                                f"Received file list: {len(self.file_list)} files"
                             )
                             if self.on_file_list_update:
-                                self._debug_log("📞 Calling on_file_list_update callback")
+                                self._debug_log("Calling on_file_list_update callback")
                                 self.on_file_list_update(self.file_list)
                             else:
-                                self._debug_log("⚠ No on_file_list_update callback set!")
+                                self._debug_log("No on_file_list_update callback set")
                     except json.JSONDecodeError as e:
                         self._error_log(f"Error parsing JSON: {e}")
 
@@ -153,7 +156,7 @@ class FileTransferClient:
                             "data": chunk_data,
                         }
                         self._debug_log(
-                            f"✓ Chunk {int(chunk_num) + 1} received "
+                            f"Chunk {int(chunk_num) + 1} received "
                             f"({len(chunk_data)} bytes)"
                         )
                         if self.loop:
@@ -172,7 +175,7 @@ class FileTransferClient:
                             "filename": filename,
                             "md5_hash": md5_hash,
                         }
-                        self._debug_log(f"✓ Checksum received: {md5_hash}")
+                        self._debug_log(f"Checksum received: {md5_hash}")
                         if self.loop:
                             self.loop.call_soon_threadsafe(self.checksum_event.set)
                         else:
@@ -197,14 +200,14 @@ class FileTransferClient:
         # Send request
         request = f"!req {filename} {chunk_num}"
         self.interface.sendText(request, destinationId=self.server_id)
-        self._debug_log(f"→ Requesting chunk {chunk_num + 1}...")
+        self._debug_log(f"Requesting chunk {chunk_num + 1}...")
 
         # Wait for response with timeout
         try:
             await asyncio.wait_for(self.chunk_event.wait(), timeout=CHUNK_TIMEOUT)
             return True
         except asyncio.TimeoutError:
-            self._error_log(f"⏱ Timeout waiting for chunk {chunk_num + 1}")
+            self._error_log(f"Timeout waiting for chunk {chunk_num + 1}")
             return False
 
     async def download_file_async(self, filename: str, total_chunks: int) -> bool:
@@ -223,10 +226,10 @@ class FileTransferClient:
         # Check if file already exists
         output_path = self.download_dir / filename
         if output_path.exists():
-            self._error_log(f"⚠️  File already exists: {output_path}")
+            self._error_log(f"File already exists: {output_path}")
             return False
 
-        self._debug_log(f"📥 Downloading {filename} ({total_chunks} chunks)...")
+        self._debug_log(f"Downloading {filename} ({total_chunks} chunks)...")
 
         chunks_data = []
 
@@ -246,13 +249,13 @@ class FileTransferClient:
                         chunks_data.append(self.received_chunk["data"])
                         break
                     else:
-                        self._error_log("⚠ Received wrong chunk, retrying...")
+                        self._error_log("Received wrong chunk, retrying...")
                 else:
                     if retry < max_retries - 1:
-                        self._error_log(f"🔄 Retry {retry + 1}/{max_retries - 1}")
+                        self._error_log(f"Retry {retry + 1}/{max_retries - 1}")
                     else:
                         self._error_log(
-                            f"✗ Failed to receive chunk {chunk_num + 1} "
+                            f"Failed to receive chunk {chunk_num + 1} "
                             f"after {max_retries} attempts"
                         )
                         return False
@@ -261,7 +264,7 @@ class FileTransferClient:
 
         # Concatenate all chunks and decode
         try:
-            self._debug_log("📝 Reassembling file...")
+            self._debug_log("Reassembling file...")
             full_encoded = "".join(chunks_data)
             file_data = base64.b64decode(full_encoded)
 
@@ -269,18 +272,18 @@ class FileTransferClient:
             with open(output_path, "wb") as f:
                 f.write(file_data)
 
-            self._debug_log(f"✅ Download complete: {output_path}")
+            self._debug_log(f"Download complete: {output_path}")
             self._debug_log(f"Size: {len(file_data)} bytes")
 
             # Validate checksum
             if await self.validate_checksum_async(filename, output_path):
                 return True
             else:
-                self._error_log("⚠ Warning: Checksum validation failed")
+                self._error_log("Warning: Checksum validation failed")
                 return False
 
         except Exception as e:
-            self._error_log(f"✗ Error saving file: {e}")
+            self._error_log(f"Error saving file: {e}")
             return False
 
     async def validate_checksum_async(self, filename: str, file_path: Path) -> bool:
@@ -293,7 +296,7 @@ class FileTransferClient:
         Returns:
             True if checksum matches, False otherwise.
         """
-        self._debug_log("🔐 Validating checksum...")
+        self._debug_log("Validating checksum...")
 
         # Calculate MD5 of downloaded file
         md5_hash = hashlib.md5()
@@ -308,29 +311,29 @@ class FileTransferClient:
 
         request = f"!check {filename}"
         self.interface.sendText(request, destinationId=self.server_id)
-        self._debug_log("→ Requesting checksum from server...")
+        self._debug_log("Requesting checksum from server...")
 
         # Wait for response with timeout
         try:
             await asyncio.wait_for(self.checksum_event.wait(), timeout=CHUNK_TIMEOUT)
         except asyncio.TimeoutError:
-            self._error_log("⏱ Timeout waiting for checksum response")
+            self._error_log("Timeout waiting for checksum response")
             return False
 
         if not self.checksum_response:
-            self._error_log("✗ No checksum response received")
+            self._error_log("No checksum response received")
             return False
 
         server_hash = self.checksum_response["md5_hash"]
 
         # Compare hashes
         if local_hash == server_hash:
-            self._debug_log(f"✓ Checksum valid: {local_hash}")
+            self._debug_log(f"Checksum valid: {local_hash}")
             if self.on_checksum_result:
                 self.on_checksum_result(True, local_hash)
             return True
         else:
-            self._error_log("✗ Checksum mismatch!")
+            self._error_log("Checksum mismatch!")
             self._error_log(f"  Local:  {local_hash}")
             self._error_log(f"  Server: {server_hash}")
             if self.on_checksum_result:
@@ -350,6 +353,8 @@ class FileTransferClient:
 
 class MFTPClientApp(App):
     """Textual TUI for MFTP Client."""
+    
+    TITLE = "MFTP Client"
 
     CSS = """
     Screen {
@@ -411,13 +416,18 @@ class MFTPClientApp(App):
     }
     
     #progress-container {
-        height: 6;
+        height: auto;
         margin: 1 2;
         border: solid $primary;
         padding: 1;
     }
     
+    #progress-label {
+        height: 1;
+    }
+    
     #progress-bar {
+        height: 1;
         margin-top: 1;
     }
     
@@ -447,13 +457,11 @@ class MFTPClientApp(App):
         debug: bool = False,
     ):
         super().__init__()
-        self.client = FileTransferClient(
-            mesh_interface, server_id, download_dir, debug
-        )
+        self.client = FileTransferClient(mesh_interface, server_id, download_dir, debug)
         self.server_id = server_id
         self.download_dir = download_dir
         self.downloading = False
-        
+
         # Set up callbacks
         self.client.on_file_list_update = self.update_file_list
         self.client.on_chunk_received = self.update_progress
@@ -467,13 +475,21 @@ class MFTPClientApp(App):
             self.call_from_thread(callback)
         else:
             callback()
+
+    def watch_status_text(self, new_status: str) -> None:
+        """Update status display when status_text changes."""
+        try:
+            status_widget = self.query_one("#status", Static)
+            status_widget.update(new_status)
+        except Exception:
+            pass  # Widget might not be mounted yet
     
     def compose(self) -> ComposeResult:
         """Compose the UI."""
         yield Header()
         yield Static(f"MFTP Client - Server: {self.server_id}", id="title")
-        yield Static(self.status_text, id="status")
-        
+        yield Static("Connecting...", id="status")
+
         with Horizontal(id="main-container"):
             # Left panel - file list and controls
             with Vertical(id="left-panel"):
@@ -485,21 +501,23 @@ class MFTPClientApp(App):
                     Button("Quit", variant="error", id="quit-btn"),
                     id="button-container",
                 )
-                
+
                 # Progress section
                 with Container(id="progress-container"):
-                    yield Label("", id="progress-label")
+                    yield Label("Ready", id="progress-label")
                     yield ProgressBar(
-                        total=self.progress_total,
+                        total=1,  # Start with total=1, will be updated on download
+                        show_bar=True,
+                        show_percentage=True,
                         show_eta=False,
                         id="progress-bar",
                     )
-            
+
             # Right panel - debug log
             with Vertical(id="right-panel"):
                 yield Static("🔍 Debug Log:", classes="section-title")
                 yield Log(id="debug-log", highlight=True, auto_scroll=True)
-        
+
         yield Footer()
 
     async def on_mount(self) -> None:
@@ -513,83 +531,98 @@ class MFTPClientApp(App):
 
         self._pub_handler = message_handler
         pub.subscribe(self._pub_handler, "meshtastic.receive.text")
-        
+
         # Set up file table
         table = self.query_one("#file-table", DataTable)
         table.add_columns("#", "Filename", "Chunks", "Size")
         table.cursor_type = "row"
-        
+
         # Hide progress initially
         progress_container = self.query_one("#progress-container")
         progress_container.display = False
-        
+
         # Request initial file list
         await asyncio.sleep(1)
-        self.add_debug_log("🔄 Requesting initial file list...")
+        self.add_debug_log("Requesting initial file list...")
         self.client.request_file_list()
         self.status_text = "Waiting for file list..."
 
     def update_file_list(self, file_list):
         """Update the file table with new file list."""
-        self.add_debug_log(f"🔄 update_file_list called with {len(file_list)} files")
+        self.add_debug_log(f"update_file_list called with {len(file_list)} files")
+
         def _update():
             table = self.query_one("#file-table", DataTable)
             table.clear()
-            
+
             for i, file_info in enumerate(file_list):
                 # Estimate size (chunks * 150 bytes base64 ~= 112.5 bytes original)
                 estimated_size = file_info["chunks"] * 112
-                size_str = f"{estimated_size}B" if estimated_size < 1024 else f"{estimated_size/1024:.1f}KB"
-                
+                size_str = (
+                    f"{estimated_size}B"
+                    if estimated_size < 1024
+                    else f"{estimated_size/1024:.1f}KB"
+                )
+
                 table.add_row(
                     str(i + 1),
                     file_info["name"],
                     str(file_info["chunks"]),
                     size_str,
                 )
-            
+
             self.status_text = f"✓ {len(file_list)} file(s) available"
-        
+
         self._safe_call(_update)
-        self.add_debug_log(f"✓ File list updated: {len(file_list)} files")
+        self.add_debug_log(f"File list updated: {len(file_list)} files")
 
     def update_progress(self, chunk_num: int):
         """Update progress bar when chunk is received."""
         if self.downloading:
+
             def _update():
                 self.progress_current = chunk_num
                 progress_bar = self.query_one("#progress-bar", ProgressBar)
                 progress_bar.update(progress=chunk_num)
-                
+
                 progress_label = self.query_one("#progress-label", Label)
                 progress_label.update(
                     f"Downloading: Chunk {chunk_num}/{self.progress_total}"
                 )
-            
+
+                # Refresh to show the update
+                self.refresh()
+
             self._safe_call(_update)
 
     def add_debug_log(self, message: str):
         """Add message to debug log."""
+
         def _log():
             log = self.query_one("#debug-log", Log)
             log.write_line(message)
-        
+
         self._safe_call(_log)
 
     def add_error_log(self, message: str):
         """Add error message to debug log."""
+
         def _log():
             log = self.query_one("#debug-log", Log)
             log.write_line(f"[bold red]{message}[/bold red]")
-        
+
         self._safe_call(_log)
 
-    def show_checksum_result(self, valid: bool, local_hash: str, server_hash: str = None):
+    def show_checksum_result(
+        self, valid: bool, local_hash: str, server_hash: str = None
+    ):
         """Show checksum validation result."""
         if valid:
-            self.add_debug_log(f"[bold green]✓ Checksum valid: {local_hash}[/bold green]")
+            self.add_debug_log(f"[bold green]Checksum valid: {local_hash}[/bold green]")
         else:
-            self.add_error_log(f"✗ Checksum mismatch! Local: {local_hash}, Server: {server_hash}")
+            self.add_error_log(
+                f"Checksum mismatch! Local: {local_hash}, Server: {server_hash}"
+            )
 
     async def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle button presses."""
@@ -602,57 +635,60 @@ class MFTPClientApp(App):
 
     async def action_refresh(self) -> None:
         """Refresh the file list."""
-        self.add_debug_log("🔄 Refreshing file list...")
+        self.add_debug_log("Refreshing file list...")
         self.status_text = "Refreshing file list..."
         self.client.request_file_list()
 
     async def action_download(self) -> None:
         """Download the selected file."""
         if self.downloading:
-            self.add_error_log("⚠ Download already in progress")
+            self.add_error_log("Download already in progress")
             return
-        
+
         table = self.query_one("#file-table", DataTable)
         if table.cursor_row is None or table.cursor_row < 0:
-            self.add_error_log("⚠ Please select a file to download")
+            self.add_error_log("Please select a file to download")
             return
-        
+
         if table.cursor_row >= len(self.client.file_list):
-            self.add_error_log("⚠ Invalid file selection")
+            self.add_error_log("Invalid file selection")
             return
-        
+
         file_info = self.client.file_list[table.cursor_row]
         filename = file_info["name"]
         total_chunks = file_info["chunks"]
-        
+
         # Show progress bar
         progress_container = self.query_one("#progress-container")
         progress_container.display = True
-        
+
         progress_bar = self.query_one("#progress-bar", ProgressBar)
         progress_bar.update(total=total_chunks, progress=0)
-        
+        self.refresh()  # Force refresh to show the bar
+
         progress_label = self.query_one("#progress-label", Label)
         progress_label.update(f"Downloading: {filename}")
-        
+
         self.progress_total = total_chunks
         self.progress_current = 0
         self.downloading = True
         self.status_text = f"Downloading {filename}..."
-        
+
         # Start download
-        self.add_debug_log(f"📥 Starting download: {filename}")
+        self.add_debug_log(f"Starting download: {filename}")
         success = await self.client.download_file_async(filename, total_chunks)
-        
+
         self.downloading = False
-        
+
         if success:
             self.status_text = f"✅ Downloaded: {filename}"
-            self.add_debug_log(f"[bold green]✅ Download complete: {filename}[/bold green]")
+            self.add_debug_log(
+                f"[bold green]Download complete: {filename}[/bold green]"
+            )
         else:
             self.status_text = f"✗ Download failed: {filename}"
-            self.add_error_log(f"✗ Download failed: {filename}")
-        
+            self.add_error_log(f"Download failed: {filename}")
+
         # Hide progress bar after a delay
         await asyncio.sleep(2)
         progress_container.display = False
