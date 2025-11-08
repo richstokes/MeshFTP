@@ -2,7 +2,9 @@
 
 A simple file transfer system for Meshtastic mesh networks, enabling file sharing between nodes over long-range radio links.
 
-<img src="images/screenshot.png" alt="Screenshot" width="75%">
+<div align="center">
+<img src="images/screenshot.png" alt="Screenshot" width="90%">
+</div>
 
 ## Overview
 
