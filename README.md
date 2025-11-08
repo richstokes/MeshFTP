@@ -62,9 +62,7 @@ On startup, the server will:
 
 ### Client
 
-There are two ways to run the client: interactive TUI mode or command-line mode. The TUI mode is recommended for ease of use. To use the TUI client, run: `mftp-tui` instead of `mftp-client` in the commands below.
-
-Download files from a server node:
+Download files from a server node using the interactive TUI client:
 
 ```bash
 uv run mftp-client -s <server-node-id> [-d <download-directory>]

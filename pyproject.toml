@@ -15,7 +15,6 @@ dependencies = [
 [project.scripts]
 mftp-server = "mftp.server:main"
 mftp-client = "mftp.client:main"
-mftp-tui = "mftp.tui_client:main"
 
 [build-system]
 requires = ["hatchling"]
