@@ -324,7 +324,7 @@ class FileTransferClient:
 
         # Compare hashes
         if local_hash == server_hash:
-            self._debug_log(f"Checksum valid: {local_hash}")
+            # self._debug_log(f"Checksum valid: {local_hash}")
             if self.on_checksum_result:
                 self.on_checksum_result(True, local_hash)
             return True
@@ -476,12 +476,16 @@ class MFTPClientApp(App):
     }
     
     #progress-label {
-        height: 1;
+        height: auto;
+        margin-bottom: 1;
     }
     
     #progress-bar {
-        height: 1;
-        margin-top: 1;
+        height: 3;
+    }
+    
+    #progress-bar > #bar {
+        height: 100%;
     }
     
     #debug-log {
