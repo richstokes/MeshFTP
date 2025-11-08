@@ -280,7 +280,7 @@ class FileTransferClient:
             self._debug_log(f"Chunk {chunk_num + 1}/{total_chunks}")
 
             # Retry logic with exponential backoff
-            max_retries = 5
+            max_retries = 10
             chunk_received = False
             for retry in range(max_retries):
                 if await self.request_chunk_async(filename, chunk_num):
