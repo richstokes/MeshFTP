@@ -73,6 +73,9 @@ class FileTransferClient:
         self.checksum_event = asyncio.Event()
         self.loop: asyncio.AbstractEventLoop | None = None
 
+        # Channel utilization tracking
+        self.channel_utilization = 0.0  # Current channel utilization percentage
+
         # Callback for UI updates
         self.on_file_list_update = None
         self.on_chunk_received = None
@@ -80,9 +83,68 @@ class FileTransferClient:
         self.on_error_message = None
         self.on_checksum_result = None
 
+        # Subscribe to telemetry updates to track channel utilization
+        pub.subscribe(self._on_telemetry_receive, "meshtastic.receive.telemetry")
+
     def set_loop(self, loop: asyncio.AbstractEventLoop):
         """Provide the asyncio loop so we can set events from other threads safely."""
         self.loop = loop
+
+    def _on_telemetry_receive(self, packet, interface):
+        """Handle telemetry packets to track channel utilization."""
+        try:
+            if "decoded" not in packet:
+                return
+
+            decoded = packet["decoded"]
+            if "telemetry" not in decoded:
+                return
+
+            telemetry = decoded["telemetry"]
+
+            # Check for channel utilization in deviceMetrics
+            if "deviceMetrics" in telemetry:
+                device_metrics = telemetry["deviceMetrics"]
+                if "channelUtilization" in device_metrics:
+                    self.channel_utilization = device_metrics["channelUtilization"]
+                    self._debug_log(
+                        f"Channel utilization updated: {self.channel_utilization:.1f}%"
+                    )
+
+            # Also check localStats for more detailed info
+            elif "localStats" in telemetry:
+                local_stats = telemetry["localStats"]
+                if "channelUtilization" in local_stats:
+                    self.channel_utilization = local_stats["channelUtilization"]
+                    self._debug_log(
+                        f"Channel utilization updated: {self.channel_utilization:.1f}%"
+                    )
+
+        except Exception as e:
+            # Don't let telemetry errors break the main flow
+            if self.debug:
+                self._debug_log(f"Error processing telemetry: {e}")
+
+    def get_adaptive_delay(self) -> float:
+        """Calculate delay based on current channel utilization.
+
+        Returns:
+            Delay in seconds based on channel utilization:
+            - 0-25%: 0 seconds (no delay)
+            - 25-50%: 5 seconds
+            - 50-75%: 10 seconds
+            - 75-100%: 30 seconds
+        """
+        ch_util = self.channel_utilization
+
+        if ch_util >= 75:
+            return 30.0
+        elif ch_util >= 50:
+            return 10.0
+        elif ch_util >= 25:
+            return 5.0
+        else:
+            return 0.0
 
     def request_file_list(self):
         """Request file list from server."""
@@ -307,7 +369,18 @@ class FileTransferClient:
                 )
                 return False
 
-            await asyncio.sleep(0.5)  # Brief delay between chunks
+            # Apply adaptive delay based on channel utilization
+            adaptive_delay = self.get_adaptive_delay()
+            if adaptive_delay > 0:
+                ch_util = self.channel_utilization
+                self._debug_log(
+                    f"Channel utilization {ch_util:.1f}% - "
+                    f"waiting {adaptive_delay:.0f}s before next chunk"
+                )
+                await asyncio.sleep(adaptive_delay)
+            else:
+                # Minimal delay when channel is clear
+                await asyncio.sleep(0.5)
 
         # Concatenate all chunks and decode
         try:
