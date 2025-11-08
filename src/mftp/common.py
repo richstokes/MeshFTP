@@ -257,7 +257,7 @@ class DeviceSelectionApp(App):
         """Compose the UI."""
         yield Header()
         yield Static("Select Meshtastic Device", id="title")
-        yield Static("Initializing...", id="status")
+        yield Static("🔍 Scanning for devices...", id="status")
         yield Static("📟 Serial Devices:", classes="section-title")
         yield self.serial_list
         yield Static("📡 Bluetooth (BLE) Devices:", classes="section-title")
@@ -270,19 +270,10 @@ class DeviceSelectionApp(App):
         )
         yield Footer()
 
-    async def on_mount(self) -> None:
+    def on_mount(self) -> None:
         """Called when app is mounted."""
-        # Update status to show we're about to scan
-        status = self.query_one("#status", Static)
-        status.update("🔍 Preparing to scan...")
-
-        # Force a refresh and yield to the event loop to ensure UI renders
-        self.refresh()
-        await asyncio.sleep(0)  # Yield to event loop
-        await asyncio.sleep(0.1)  # Give a moment for rendering
-
-        # Now start the scan
-        await self.refresh_devices()
+        # Run the device scan in a worker so it doesn't block the UI
+        self.run_worker(self.refresh_devices(), exclusive=False)
 
     async def refresh_devices(self) -> None:
         """Refresh the list of available devices."""
