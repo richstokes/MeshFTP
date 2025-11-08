@@ -20,7 +20,6 @@ from textual.widgets import (
     Static,
     Button,
     DataTable,
-    ProgressBar,
     RichLog,
     Label,
 )
@@ -524,8 +523,7 @@ class MFTPClientApp(App):
         height: auto;
         margin: 1 2;
         border: solid $primary;
-        padding: 1;
-        width: 100%;
+        padding: 1 1;
         layout: vertical;
     }
     
@@ -537,10 +535,10 @@ class MFTPClientApp(App):
     #progress-bar {
         height: 3;
         width: 100%;
-    }
-    
-    #progress-bar > #bar {
-        height: 100%;
+        background: $panel;
+        color: $text;
+        content-align: left middle;
+        padding: 0 1;
     }
     
     #debug-log {
@@ -616,13 +614,7 @@ class MFTPClientApp(App):
                 # Progress section
                 with Container(id="progress-container"):
                     yield Label("Ready", id="progress-label")
-                    yield ProgressBar(
-                        total=1,  # Start with total=1, will be updated on download
-                        show_bar=True,
-                        show_percentage=True,
-                        show_eta=False,
-                        id="progress-bar",
-                    )
+                    yield Static("", id="progress-bar")
 
             # Right panel - debug log
             with Vertical(id="right-panel"):
@@ -695,8 +687,26 @@ class MFTPClientApp(App):
 
             def _update():
                 self.progress_current = chunk_num
-                progress_bar = self.query_one("#progress-bar", ProgressBar)
-                progress_bar.update(progress=chunk_num)
+
+                # Calculate progress percentage
+                progress_pct = (
+                    chunk_num / self.progress_total if self.progress_total > 0 else 0
+                )
+
+                # Get the progress bar widget to determine available width
+                progress_bar = self.query_one("#progress-bar", Static)
+
+                # Calculate bar width based on widget size (accounting for padding and percentage text)
+                # Estimate: widget width - padding (2) - percentage text space (~5 chars)
+                available_width = (
+                    progress_bar.size.width - 7 if progress_bar.size.width > 10 else 40
+                )
+
+                # Create custom progress bar with blocks
+                filled_width = int(available_width * progress_pct)
+                bar_str = "█" * filled_width + "░" * (available_width - filled_width)
+
+                progress_bar.update(f"{bar_str} {progress_pct*100:.0f}%")
 
                 progress_label = self.query_one("#progress-label", Label)
                 progress_label.update(
@@ -771,8 +781,13 @@ class MFTPClientApp(App):
             progress_container = self.query_one("#progress-container")
             progress_container.display = True
 
-            progress_bar = self.query_one("#progress-bar", ProgressBar)
-            progress_bar.update(total=total_chunks, progress=0)
+            # Initialize custom progress bar
+            progress_bar = self.query_one("#progress-bar", Static)
+            available_width = (
+                progress_bar.size.width - 7 if progress_bar.size.width > 10 else 40
+            )
+            bar_str = "░" * available_width
+            progress_bar.update(f"{bar_str} 0%")
             self.refresh()  # Force refresh to show the bar
 
             progress_label = self.query_one("#progress-label", Label)
