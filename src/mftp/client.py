@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import base64
 import hashlib
+import random
 import sys
 import threading
 import time
@@ -33,6 +34,24 @@ from mftp.common import MeshtasticConnection, select_device
 # Timeout for chunk requests (seconds)
 CHUNK_TIMEOUT = 30
 
+# Exponential backoff configuration (seconds)
+MAX_BACKOFF = 30  # Maximum backoff time in seconds
+
+
+def calculate_backoff(retry_count: int) -> float:
+    """Calculate exponential backoff time with jitter.
+
+    Args:
+        retry_count: Current retry attempt (0-indexed)
+
+    Returns:
+        Backoff time in seconds, capped at MAX_BACKOFF (30 seconds)
+    """
+    # Exponential backoff: 2^retry_count seconds
+    backoff = min(2**retry_count, MAX_BACKOFF)
+    # Add jitter: randomize between 0 and backoff time
+    return random.uniform(0, backoff)
+
 
 class FileTransferClient:
     """Client for transferring files over Meshtastic."""
@@ -48,6 +67,9 @@ class FileTransferClient:
         self.current_transfer = None
         self.received_chunk = None
         self.chunk_event = asyncio.Event()
+        self.expected_chunk = (
+            None  # Track which chunk we're currently expecting (filename, chunk_num)
+        )
         self.checksum_response = None
         self.checksum_event = asyncio.Event()
         self.loop: asyncio.AbstractEventLoop | None = None
@@ -151,21 +173,34 @@ class FileTransferClient:
                     parts = text.split(maxsplit=3)
                     if len(parts) == 4:
                         _, filename, chunk_num, chunk_data = parts
-                        self.received_chunk = {
-                            "filename": filename,
-                            "chunk_num": int(chunk_num),
-                            "data": chunk_data,
-                        }
+                        chunk_num_int = int(chunk_num)
+
                         self._debug_log(
-                            f"Chunk {int(chunk_num) + 1} received "
+                            f"Chunk {chunk_num_int + 1} received "
                             f"({len(chunk_data)} bytes)"
                         )
-                        if self.loop:
-                            self.loop.call_soon_threadsafe(self.chunk_event.set)
+
+                        # Only process if this is the chunk we're expecting
+                        if self.expected_chunk and self.expected_chunk == (
+                            filename,
+                            chunk_num_int,
+                        ):
+                            self.received_chunk = {
+                                "filename": filename,
+                                "chunk_num": chunk_num_int,
+                                "data": chunk_data,
+                            }
+                            if self.loop:
+                                self.loop.call_soon_threadsafe(self.chunk_event.set)
+                            else:
+                                self.chunk_event.set()
+                            if self.on_chunk_received:
+                                self.on_chunk_received(chunk_num_int + 1)
                         else:
-                            self.chunk_event.set()
-                        if self.on_chunk_received:
-                            self.on_chunk_received(int(chunk_num) + 1)
+                            self._debug_log(
+                                f"Ignoring stale/unexpected chunk {chunk_num_int + 1} "
+                                f"(expecting {self.expected_chunk})"
+                            )
 
                 # Handle checksum response
                 elif text.startswith("!checksum"):
@@ -197,6 +232,7 @@ class FileTransferClient:
         """
         self.received_chunk = None
         self.chunk_event.clear()
+        self.expected_chunk = (filename, chunk_num)  # Mark which chunk we're expecting
 
         # Send request
         request = f"!req {filename} {chunk_num}"
@@ -206,10 +242,22 @@ class FileTransferClient:
         # Wait for response with timeout
         try:
             await asyncio.wait_for(self.chunk_event.wait(), timeout=CHUNK_TIMEOUT)
-            return True
+            # Verify we received a chunk and it matches what we requested
+            if (
+                self.received_chunk
+                and self.received_chunk["filename"] == filename
+                and self.received_chunk["chunk_num"] == chunk_num
+            ):
+                return True
+            else:
+                # This shouldn't happen now, but keep as safety check
+                self._error_log(f"Received mismatched chunk response")
+                return False
         except asyncio.TimeoutError:
             self._error_log(f"Timeout waiting for chunk {chunk_num + 1}")
             return False
+        finally:
+            self.expected_chunk = None  # Clear expectation
 
     async def download_file_async(self, filename: str, total_chunks: int) -> bool:
         """Download a complete file from the server (async version).
@@ -232,29 +280,33 @@ class FileTransferClient:
         for chunk_num in range(total_chunks):
             self._debug_log(f"Chunk {chunk_num + 1}/{total_chunks}")
 
-            # Retry logic
+            # Retry logic with exponential backoff
             max_retries = 5
+            chunk_received = False
             for retry in range(max_retries):
                 if await self.request_chunk_async(filename, chunk_num):
-                    # Verify we got the right chunk
-                    if (
-                        self.received_chunk
-                        and self.received_chunk["filename"] == filename
-                        and self.received_chunk["chunk_num"] == chunk_num
-                    ):
-                        chunks_data.append(self.received_chunk["data"])
-                        break
-                    else:
-                        self._error_log("Received wrong chunk, retrying...")
-                else:
-                    if retry < max_retries - 1:
-                        self._error_log(f"Retry {retry + 1}/{max_retries - 1}")
-                    else:
-                        self._error_log(
-                            f"Failed to receive chunk {chunk_num + 1} "
-                            f"after {max_retries} attempts"
-                        )
-                        return False
+                    # Chunk was successfully received and verified in request_chunk_async
+                    chunks_data.append(self.received_chunk["data"])
+                    chunk_received = True
+                    break
+
+                # If we didn't get the chunk (timeout or wrong chunk), apply backoff
+                if retry < max_retries - 1:
+                    # Calculate exponential backoff time with jitter
+                    backoff_time = calculate_backoff(retry)
+                    self._error_log(
+                        f"Retry {retry + 1}/{max_retries - 1} "
+                        f"(backing off {backoff_time:.1f}s)"
+                    )
+                    await asyncio.sleep(backoff_time)
+
+            # Check if we successfully received the chunk
+            if not chunk_received:
+                self._error_log(
+                    f"Failed to receive chunk {chunk_num + 1} "
+                    f"after {max_retries} attempts"
+                )
+                return False
 
             await asyncio.sleep(0.5)  # Brief delay between chunks
 
