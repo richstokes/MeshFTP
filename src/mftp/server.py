@@ -1,0 +1,349 @@
+"""MFTP Server - File transfer server for Meshtastic networks."""
+
+import argparse
+import base64
+import hashlib
+import json
+import sys
+import time
+import traceback
+from dataclasses import dataclass
+from pathlib import Path
+
+from pubsub import pub
+
+from mftp.common import MeshtasticConnection, select_device_sync
+
+# Track processed packet IDs to avoid duplicates
+processed_packets = set()
+
+# Chunk size for file transfer (150 bytes to fit in Meshtastic messages)
+CHUNK_SIZE = 150
+
+# Maximum filename length (to fit in message payloads)
+MAX_FILENAME_LENGTH = 10
+
+# Maximum number of files to serve (limited by 200-byte DM payload for !ls response)
+# With max 10-char filenames and no size field, we can fit 4 files in 200 bytes
+MAX_FILE_COUNT = 4
+
+# Storage for chunked files
+file_chunks = {}
+
+
+@dataclass
+class FileInfo:
+    """Information about a chunked file."""
+
+    name: str
+    size: int  # Original file size in bytes
+    chunks: list[str]  # Base64 encoded chunks
+    md5_hash: str  # MD5 hash of original file
+
+    @property
+    def num_chunks(self) -> int:
+        return len(self.chunks)
+
+
+def chunk_file(file_path: Path) -> FileInfo:
+    """Read a file, base64 encode it, and chunk it for transmission.
+
+    Args:
+        file_path: Path to the file to chunk.
+
+    Returns:
+        FileInfo object with chunked data.
+    """
+    # Read file bytes
+    with open(file_path, "rb") as f:
+        file_data = f.read()
+
+    # Calculate MD5 hash of original file
+    md5_hash = hashlib.md5(file_data).hexdigest()
+
+    # Base64 encode the entire file
+    encoded_data = base64.b64encode(file_data).decode("ascii")
+
+    # Split into chunks
+    chunks = [
+        encoded_data[i : i + CHUNK_SIZE]
+        for i in range(0, len(encoded_data), CHUNK_SIZE)
+    ]
+
+    return FileInfo(
+        name=file_path.name, size=len(file_data), chunks=chunks, md5_hash=md5_hash
+    )
+
+
+def prepare_files(directory: Path) -> dict[str, FileInfo]:
+    """Prepare all files in directory by chunking them.
+
+    Args:
+        directory: Directory containing files to serve.
+
+    Returns:
+        Dictionary mapping filename to FileInfo.
+    """
+    chunked_files = {}
+
+    print(f"📦 Preparing files from {directory}...")
+
+    # First pass: collect valid files
+    valid_files = []
+    for item in directory.iterdir():
+        if item.is_file():
+            # Check filename length
+            if len(item.name) > MAX_FILENAME_LENGTH:
+                print(
+                    f"   ⚠ Skipping: {item.name} (filename too long, max {MAX_FILENAME_LENGTH} chars)"
+                )
+                continue
+            valid_files.append(item)
+
+    # Check if we exceed the maximum file count
+    if len(valid_files) > MAX_FILE_COUNT:
+        print(
+            f"   ⚠ WARNING: Found {len(valid_files)} files, but can only serve {MAX_FILE_COUNT} files"
+        )
+        print(f"   ⚠ (Limited by 200-byte DM payload size for !ls response)")
+        print(f"   → Serving only the first {MAX_FILE_COUNT} files")
+        valid_files = valid_files[:MAX_FILE_COUNT]
+
+    # Second pass: chunk the files
+    for item in valid_files:
+        try:
+            print(f"   Processing: {item.name}...", end=" ")
+            file_info = chunk_file(item)
+            chunked_files[item.name] = file_info
+            print(f"✓ ({file_info.num_chunks} chunks)")
+        except Exception as e:
+            print(f"✗ Error: {e}")
+
+    print(f"✓ Prepared {len(chunked_files)} file(s)\n")
+    return chunked_files
+
+
+def list_files_json(file_chunks: dict[str, FileInfo]) -> str:
+    """List available files in JSON format for client parsing.
+
+    Args:
+        file_chunks: Dictionary of prepared files.
+
+    Returns:
+        JSON string with file information.
+    """
+    files = []
+    for filename in sorted(file_chunks.keys()):
+        file_info = file_chunks[filename]
+        files.append({"name": filename, "chunks": file_info.num_chunks})
+
+    return json.dumps({"files": files})
+
+
+def on_receive(packet, interface, file_chunks: dict[str, FileInfo]):
+    """Handle received messages.
+
+    Args:
+        packet: The received packet.
+        interface: The Meshtastic interface.
+        file_chunks: Dictionary of prepared files.
+    """
+    try:
+        # Deduplicate packets - mesh can rebroadcast DMs and we see them multiple times
+        packet_id = packet.get("id")
+        if packet_id in processed_packets:
+            return  # Already processed this packet
+        processed_packets.add(packet_id)
+
+        # Limit the size of the processed_packets set to avoid memory issues
+        # Remove oldest half when we hit the limit
+        if len(processed_packets) > 1000:
+            # Convert to list, remove first half, convert back to set
+            packet_list = list(processed_packets)
+            processed_packets.clear()
+            processed_packets.update(packet_list[500:])
+
+        # Check if this is a text message
+        if "decoded" in packet:
+            decoded = packet["decoded"]
+
+            # Check for text payload
+            if "text" in decoded:
+                text = decoded["text"]
+                from_id = packet.get("fromId", "unknown")
+                to_id = packet.get("toId", "unknown")
+
+                # Get our node ID to check if this is a DM to us
+                my_node_id = interface.myInfo.my_node_num
+                my_node_id_hex = f"!{my_node_id:08x}"
+
+                # Check if this is a direct message to us (not broadcast)
+                is_dm = to_id == my_node_id_hex or packet.get("to") == my_node_id
+
+                # Only debug print DMs to this node
+                if is_dm:
+                    print(f"\n📨 DM from {from_id}: '{text}'")
+
+                    # Check if message starts with command prefix
+                    text_stripped = text.strip()
+                    if text_stripped.startswith("!"):
+                        parts = text_stripped.split(maxsplit=2)
+                        command = parts[0]
+
+                        # Handle !ls command (JSON format for client)
+                        if command == "!ls":
+                            print(f"   → Processing !ls command...")
+                            response = list_files_json(file_chunks)
+                            interface.sendText(response, destinationId=from_id)
+                            print(f"   ✓ Sent file list to {from_id}")
+
+                        # Handle !req <filename> <chunk_num> command
+                        elif command == "!req" and len(parts) == 3:
+                            filename = parts[1]
+                            try:
+                                chunk_num = int(parts[2])
+                                print(f"   → Request for {filename} chunk {chunk_num}")
+
+                                # Check if file exists
+                                if filename not in file_chunks:
+                                    error_msg = f"!error File not found: {filename}"
+                                    interface.sendText(error_msg, destinationId=from_id)
+                                    print(f"   ✗ File not found")
+                                    return
+
+                                file_info = file_chunks[filename]
+
+                                # Check if chunk number is valid
+                                if chunk_num < 0 or chunk_num >= file_info.num_chunks:
+                                    error_msg = f"!error Invalid chunk {chunk_num} for {filename}"
+                                    interface.sendText(error_msg, destinationId=from_id)
+                                    print(f"   ✗ Invalid chunk number")
+                                    return
+
+                                # Send the requested chunk
+                                chunk_data = file_info.chunks[chunk_num]
+                                response = f"!chunk {filename} {chunk_num} {chunk_data}"
+                                interface.sendText(response, destinationId=from_id)
+                                print(
+                                    f"   ✓ Sent chunk {chunk_num}/{file_info.num_chunks-1} to {from_id}"
+                                )
+
+                            except ValueError:
+                                error_msg = "!error Invalid chunk number format"
+                                interface.sendText(error_msg, destinationId=from_id)
+                                print(f"   ✗ Invalid chunk number format")
+
+                        # Handle !check <filename> command
+                        elif command == "!check" and len(parts) == 2:
+                            filename = parts[1]
+                            print(f"   → Checksum request for {filename}")
+
+                            # Check if file exists
+                            if filename not in file_chunks:
+                                error_msg = f"!error File not found: {filename}"
+                                interface.sendText(error_msg, destinationId=from_id)
+                                print(f"   ✗ File not found")
+                                return
+
+                            file_info = file_chunks[filename]
+
+                            # Send checksum response
+                            response = f"!checksum {filename} {file_info.md5_hash}"
+                            interface.sendText(response, destinationId=from_id)
+                            print(f"   ✓ Sent checksum for {filename} to {from_id}")
+
+                        else:
+                            # Unknown command
+                            print(f"   ⚠ Unknown command: '{text_stripped}'")
+                            interface.sendText(
+                                f"Unknown command: {text_stripped}\nAvailable: !ls, !req <filename> <chunk>, !check <filename>",
+                                destinationId=from_id,
+                            )
+
+    except Exception as e:
+        print(f"❌ Error handling message: {e}")
+        traceback.print_exc()
+
+
+def main():
+    """Main entry point for MFTP server."""
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(
+        description="MFTP Server - Meshtastic File Transfer Protocol Server"
+    )
+    parser.add_argument(
+        "-d",
+        "--directory",
+        type=str,
+        required=True,
+        help="Directory to serve files from",
+    )
+    args = parser.parse_args()
+
+    # Validate directory exists
+    serve_dir = Path(args.directory).resolve()
+    if not serve_dir.exists():
+        print(f"Error: Directory '{serve_dir}' does not exist.")
+        sys.exit(1)
+
+    if not serve_dir.is_dir():
+        print(f"Error: '{serve_dir}' is not a directory.")
+        sys.exit(1)
+
+    print("MFTP Server - Meshtastic File Transfer Protocol")
+    print("=" * 50)
+    print(f"Serving files from: {serve_dir}")
+    print()
+
+    # Prepare files by chunking them
+    chunked_files = prepare_files(serve_dir)
+
+    # Select device using TUI
+    device_info = select_device_sync()
+
+    if not device_info:
+        print("No device selected. Exiting.")
+        sys.exit(0)
+
+    print(f"\nConnecting to {device_info}...")
+
+    # Connect to the selected device
+    with MeshtasticConnection() as mesh:
+        if not mesh.connect(device_info):
+            print("Failed to connect to device.")
+            sys.exit(1)
+
+        print("Connected to device successfully!")
+
+        # Display server node ID
+        my_node_id = mesh.interface.myInfo.my_node_num
+        my_node_id_hex = f"{my_node_id:08x}"
+        print(f"\nServer Node ID: {my_node_id_hex}")
+        print(f"Connect a client with: uv run mftp-client -s {my_node_id_hex}")
+
+        print(f"\nMFTP Server is listening for file requests")
+        print("Commands: !ls - list files, !req <filename> <chunk> - request chunk")
+        print("Press Ctrl+C to exit\n")
+
+        # Define callback that has access to chunked files
+        def message_handler(packet, interface):
+            on_receive(packet, interface, chunked_files)
+
+        # Subscribe to receive text messages
+        # Note: Only subscribing to .receive.text, not .receive to avoid duplicates
+        pub.subscribe(message_handler, "meshtastic.receive.text")
+
+        print("✓ Subscribed to message events")
+        print("  Waiting for messages...\n")
+
+        # Keep server running
+        try:
+            while True:
+                time.sleep(0.1)
+        except KeyboardInterrupt:
+            print("\n\nShutting down server...")
+            pub.unsubscribe(message_handler, "meshtastic.receive.text")
+
+
+if __name__ == "__main__":
+    main()
