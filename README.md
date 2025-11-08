@@ -88,13 +88,8 @@ On startup, the client will:
 1. Show available Meshtastic devices
 2. Let you select a device
 3. Connect to the mesh network
-4. Enter interactive mode
+4. Enter interactive mode, letting you list and download files from the server
 
-**Interactive Commands:**
-
-- `ls` - Request and display file list from server
-- `get <number>` - Download file by number from the list
-- `quit` - Exit the client
 
 ## Protocol Details
 
