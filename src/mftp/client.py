@@ -5,6 +5,7 @@ import asyncio
 import base64
 import hashlib
 import random
+import signal
 import sys
 import threading
 from pathlib import Path
@@ -130,21 +131,21 @@ class FileTransferClient:
 
         Returns:
             Delay in seconds based on channel utilization:
-            - 0-25%: 0 seconds (no delay)
-            - 25-50%: 5 seconds
-            - 50-75%: 10 seconds
-            - 75-100%: 30 seconds
+            - 0-25%: 2 seconds
+            - 25-50%: 10 seconds
+            - 50-75%: 30 seconds
+            - 75-100%: 60 seconds
         """
         ch_util = self.channel_utilization
 
         if ch_util >= 75:
-            return 30.0
+            return 60.0
         elif ch_util >= 50:
-            return 10.0
+            return 30.0
         elif ch_util >= 25:
-            return 5.0
+            return 10.0
         else:
-            return 0.0
+            return 2.0
 
     def request_file_list(self):
         """Request file list from server."""
@@ -952,10 +953,20 @@ class MFTPClientApp(App):
     def action_quit(self) -> None:
         """Quit the application."""
         try:
+            # Unsubscribe from messages
             if hasattr(self, "_pub_handler") and self._pub_handler:
                 pub.unsubscribe(self._pub_handler, "meshtastic.receive.text")
         except Exception:
             pass
+
+        try:
+            # Disconnect the mesh interface
+            if hasattr(self.client, "interface") and self.client.interface:
+                self.client.interface.close()
+        except Exception as e:
+            # Log but don't block exit
+            pass
+
         self.exit()
 
 
@@ -1039,9 +1050,32 @@ async def main_async():
         # Create and run the TUI app
         app = MFTPClientApp(mesh.interface, server_id, download_dir, args.debug)
         await app.run_async()
+    except KeyboardInterrupt:
+        print("\nShutting down client...")
     finally:
-        # Clean up
-        mesh.disconnect()
+        # Clean up mesh connection with aggressive timeout
+        import threading
+        import os
+
+        disconnect_complete = threading.Event()
+
+        async def force_exit_after_timeout():
+            await asyncio.sleep(3.0)  # Give 3 seconds for cleanup
+            if not disconnect_complete.is_set():
+                print("Cleanup timed out, forcing exit...")
+                os._exit(0)  # Force exit if disconnect hangs
+
+        # Start force exit timer
+        asyncio.create_task(force_exit_after_timeout())
+
+        try:
+            mesh.disconnect()
+        except Exception as e:
+            print(f"Warning: Error during disconnect: {e}")
+
+        disconnect_complete.set()
+        # Give BLE a moment to clean up
+        await asyncio.sleep(0.2)
 
 
 def main():

@@ -146,15 +146,33 @@ class MeshtasticConnection:
             return False
 
     def disconnect(self):
-        """Disconnect from the Meshtastic device."""
+        """Disconnect from the Meshtastic device with timeout."""
         if self.interface:
-            try:
-                self.interface.close()
-            except Exception as e:
-                logger.error(f"Disconnect error: {e}")
-            finally:
-                self.interface = None
-                self.device_info = None
+            import threading
+            import time
+
+            disconnect_complete = threading.Event()
+
+            def _disconnect_thread():
+                try:
+                    logger.debug("Disconnecting from Meshtastic device...")
+                    self.interface.close()
+                    logger.debug("Disconnect complete")
+                except Exception as e:
+                    logger.error(f"Disconnect error: {e}")
+                finally:
+                    disconnect_complete.set()
+
+            # Start disconnect in a thread
+            thread = threading.Thread(target=_disconnect_thread, daemon=True)
+            thread.start()
+
+            # Wait for disconnect with timeout
+            if not disconnect_complete.wait(timeout=2.0):
+                logger.warning("Disconnect timed out, forcing exit...")
+
+            self.interface = None
+            self.device_info = None
 
     def send_message(self, text: str, destination: str = "^all") -> bool:
         """Send a text message via Meshtastic.

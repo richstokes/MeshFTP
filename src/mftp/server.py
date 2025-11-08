@@ -4,6 +4,7 @@ import argparse
 import base64
 import hashlib
 import json
+import signal
 import sys
 import time
 from dataclasses import dataclass
@@ -302,7 +303,8 @@ def main():
     logger.info(f"Connecting to {device_info}")
 
     # Connect to the selected device
-    with MeshtasticConnection() as mesh:
+    mesh = MeshtasticConnection()
+    try:
         if not mesh.connect(device_info):
             logger.error("Failed to connect to device")
             sys.exit(1)
@@ -329,13 +331,47 @@ def main():
 
         logger.success("Subscribed to message events - waiting for messages...")
 
+        # Set up signal handlers for clean shutdown
+        shutdown_flag = False
+
+        def signal_handler(signum, frame):
+            nonlocal shutdown_flag
+            shutdown_flag = True
+
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
+
         # Keep server running
         try:
-            while True:
+            while not shutdown_flag:
                 time.sleep(0.1)
         except KeyboardInterrupt:
+            pass
+        finally:
             logger.info("Shutting down server...")
-            pub.unsubscribe(message_handler, "meshtastic.receive.text")
+            try:
+                pub.unsubscribe(message_handler, "meshtastic.receive.text")
+            except Exception as e:
+                logger.debug(f"Error unsubscribing: {e}")
+    finally:
+        # Force disconnect with timeout
+        import threading
+
+        disconnect_complete = threading.Event()
+
+        def force_exit_thread():
+            time.sleep(3.0)  # Give 3 seconds for cleanup
+            if not disconnect_complete.is_set():
+                logger.warning("Cleanup timed out, forcing exit...")
+                import os
+
+                os._exit(0)  # Force exit if disconnect hangs
+
+        force_thread = threading.Thread(target=force_exit_thread, daemon=True)
+        force_thread.start()
+
+        mesh.disconnect()
+        disconnect_complete.set()
 
 
 if __name__ == "__main__":
