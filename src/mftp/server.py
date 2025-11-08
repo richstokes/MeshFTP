@@ -35,7 +35,7 @@ class FileInfo:
 
     name: str
     size: int  # Original file size in bytes
-    chunks: list[str]  # Base64 encoded chunks
+    chunks: list[str]  # Base85 encoded chunks
     md5_hash: str  # MD5 hash of original file
 
     @property
@@ -44,7 +44,7 @@ class FileInfo:
 
 
 def chunk_file(file_path: Path) -> FileInfo:
-    """Read a file, base64 encode it, and chunk it for transmission.
+    """Read a file, base85 encode it, and chunk it for transmission.
 
     Args:
         file_path: Path to the file to chunk.
@@ -59,8 +59,8 @@ def chunk_file(file_path: Path) -> FileInfo:
     # Calculate MD5 hash of original file
     md5_hash = hashlib.md5(file_data).hexdigest()
 
-    # Base64 encode the entire file
-    encoded_data = base64.b64encode(file_data).decode("ascii")
+    # Base85 encode the entire file
+    encoded_data = base64.b85encode(file_data).decode("ascii")
 
     # Split into chunks
     chunks = [

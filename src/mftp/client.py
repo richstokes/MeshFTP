@@ -390,7 +390,7 @@ class FileTransferClient:
         try:
             self._debug_log("Reassembling file...")
             full_encoded = "".join(chunks_data)
-            file_data = base64.b64decode(full_encoded)
+            file_data = base64.b85decode(full_encoded.encode("ascii"))
 
             # Write to file
             with open(output_path, "wb") as f:
@@ -738,8 +738,8 @@ class MFTPClientApp(App):
             table.clear()
 
             for i, file_info in enumerate(file_list):
-                # Estimate size (chunks * 150 bytes base64 ~= 112.5 bytes original)
-                estimated_size = file_info["chunks"] * 112
+                # Estimate size (chunks * 150 bytes base85 ~= 120 bytes original)
+                estimated_size = file_info["chunks"] * 120
                 size_str = (
                     f"{estimated_size}B"
                     if estimated_size < 1024

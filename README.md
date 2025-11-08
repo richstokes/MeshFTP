@@ -13,7 +13,7 @@ MeshFTP consists of two components:
 - **Server**: Serves files from a directory to other mesh nodes
 - **Client**: Downloads files from a server node on the mesh network
 
-Files are chunked, base64-encoded, and transferred over Meshtastic direct messages (DMs) with automatic retry logic and MD5 checksum validation.
+Files are chunked, base85-encoded, and transferred over Meshtastic direct messages (DMs) with automatic retry logic and MD5 checksum validation.
 
 MeshFTP is designed for small files due to Meshtastic's low bandwidth and DM size limitations. It is ideal for sharing text files, small images, or configuration files in remote areas without internet access. 
 
@@ -114,7 +114,7 @@ MFTP uses Meshtastic direct messages with a simple command protocol:
 **Server → Client:**
 
 - `{"files":[{"name":"file.txt","chunks":5},...]}` - JSON file list
-- `!chunk <filename> <chunk_number> <base64_data>` - File chunk response
+- `!chunk <filename> <chunk_number> <base85_data>` - File chunk response
 - `!checksum <filename> <md5_hash>` - Checksum response
 - `!error <message>` - Error message
 
@@ -124,7 +124,7 @@ MFTP uses Meshtastic direct messages with a simple command protocol:
 2. Server responds with JSON containing available files
 3. Client displays files and user selects one
 4. Client requests chunks sequentially with 30-second timeout
-5. Server sends each chunk as base64-encoded data
+5. Server sends each chunk as base85-encoded data
 6. Client retries failed chunks up to 5 times with exponential backoff
 7. After all chunks received, client reassembles and saves file
 8. Client requests checksum and validates downloaded file
@@ -132,7 +132,7 @@ MFTP uses Meshtastic direct messages with a simple command protocol:
 
 ### Chunking
 
-- Files are split into 150-byte chunks (after base64 encoding)
+- Files are split into 150-byte chunks (after base85 encoding)
 - Chunk size chosen to fit within Meshtastic DM payload
 - Each chunk is transmitted independently with error handling
 - Progress displayed as "Chunk X/Y" during download
@@ -170,7 +170,7 @@ MFTP uses Meshtastic direct messages with a simple command protocol:
 ### Other Limitations
 
 - **No authentication**: Anyone on the mesh can access served files
-- **No encryption**: Files transferred in plaintext (base64 encoded). I don't fully understand if/how Meshtastic encrypts DMs so send at your own risk!
+- **No encryption**: Files transferred in plaintext (base85 encoded). I don't fully understand if/how Meshtastic encrypts DMs so send at your own risk!
 - **No compression**: Files sent as-is, no size optimization - compress your files first
 - **No directory browsing**: Only serves files from one directory
 - **No file upload/deletion**: Server directory is read-only
