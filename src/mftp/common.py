@@ -8,11 +8,20 @@ from typing import Optional
 import meshtastic.serial_interface
 import meshtastic.ble_interface
 from bleak import BleakScanner
+from loguru import logger
 from serial.tools import list_ports
 from textual.app import App, ComposeResult
 from textual.containers import Container, Vertical
 from textual.widgets import Header, Footer, Static, Button, ListView, ListItem, Label
 from textual.binding import Binding
+
+# Configure loguru format to show only seconds (not milliseconds)
+logger.remove()  # Remove default handler
+logger.add(
+    lambda msg: print(msg, end=""),
+    format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <level>{message}</level>",
+    colorize=True,
+)
 
 
 class ConnectionType(Enum):
@@ -84,7 +93,7 @@ class MeshtasticConnection:
                         )
                     )
         except Exception as e:
-            print(f"BLE discovery error: {e}")
+            logger.error(f"BLE discovery error: {e}")
 
         return devices
 
@@ -116,7 +125,7 @@ class MeshtasticConnection:
             return True
 
         except Exception as e:
-            print(f"Connection error: {e}")
+            logger.error(f"Connection error: {e}")
             return False
 
     def disconnect(self):
@@ -125,7 +134,7 @@ class MeshtasticConnection:
             try:
                 self.interface.close()
             except Exception as e:
-                print(f"Disconnect error: {e}")
+                logger.error(f"Disconnect error: {e}")
             finally:
                 self.interface = None
                 self.device_info = None
@@ -141,14 +150,14 @@ class MeshtasticConnection:
             True if send successful, False otherwise.
         """
         if not self.interface:
-            print("Not connected to a device")
+            logger.warning("Not connected to a device")
             return False
 
         try:
             self.interface.sendText(text, destinationId=destination)
             return True
         except Exception as e:
-            print(f"Send error: {e}")
+            logger.error(f"Send error: {e}")
             return False
 
     def __enter__(self):

@@ -20,7 +20,7 @@ Install using `uv`:
 ```bash
 # Clone the repository
 git clone <repository-url>
-cd MFTP
+cd MeshFTP
 
 # Install dependencies
 uv sync
