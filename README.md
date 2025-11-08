@@ -73,6 +73,8 @@ uv run mftp-client -s <server-node-id> [-d <download-directory>]
 - `-s, --server` (required): Server node ID to connect to (e.g., `!abcd1234` or `abcd1234`)
 - `-d, --directory` (optional): Download directory (default: `~/Downloads/MFTP`)
 
+> Note: Terminals will often try and interpret the `!` character, so either escape it (e.g., `\!abcd1234`) or omit it when specifying the server node ID.
+
 **Example:**
 
 ```bash
