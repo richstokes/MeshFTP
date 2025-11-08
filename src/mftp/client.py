@@ -706,7 +706,15 @@ class MFTPClientApp(App):
                 filled_width = int(available_width * progress_pct)
                 bar_str = "█" * filled_width + "░" * (available_width - filled_width)
 
-                progress_bar.update(f"{bar_str} {progress_pct*100:.0f}%")
+                # Color the bar green when complete
+                if progress_pct >= 1.0:
+                    bar_display = (
+                        f"[bold green]{bar_str} {progress_pct*100:.0f}%[/bold green]"
+                    )
+                else:
+                    bar_display = f"{bar_str} {progress_pct*100:.0f}%"
+
+                progress_bar.update(bar_display)
 
                 progress_label = self.query_one("#progress-label", Label)
                 progress_label.update(
