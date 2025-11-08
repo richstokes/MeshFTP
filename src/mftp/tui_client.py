@@ -568,7 +568,7 @@ class MFTPClientApp(App):
 
             # Right panel - debug log
             with Vertical(id="right-panel"):
-                yield Static("🔍 Debug Log:", classes="section-title")
+                yield Static("Debug Log:", classes="section-title")
                 yield RichLog(
                     id="debug-log", highlight=True, markup=True, auto_scroll=True
                 )

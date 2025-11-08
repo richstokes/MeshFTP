@@ -183,6 +183,7 @@ MFTP uses Meshtastic direct messages with a simple command protocol:
 - **No compression**: Files sent as-is, no size optimization - compress your files first
 - **No directory browsing**: Only serves files from one directory
 - **No file deletion**: Server directory is read-only
+- **No directory refresh**: Files are loaded on server startup only, restart to update
 
 ## Tips
 
