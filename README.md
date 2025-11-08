@@ -154,16 +154,9 @@ MFTP uses Meshtastic direct messages with a simple command protocol:
 
 ### Network Constraints
 
-- **Transfer speed**: Very slow
-  - Meshtastic has low bitrate (LoRa is long-range, not high-speed)
-  - Mesh network adds latency for multi-hop routes
-  - Expect minutes for small files, longer for large files
-
-- **Sequential chunks only**:
-  - No parallel chunk download
-
-- **Contention**:
-  - MeshFTP automatically watches ChUtil and slows down when the network is busys
+- **Transfer speed**: Very slow - Meshtastic has low bitrate (LoRa is long-range, not high-speed), mesh network adds latency for multi-hop routes, expect minutes for small files
+- **Sequential chunks only**: No parallel chunk download
+- **Contention**: MeshFTP automatically watches ChUtil and slows down when the network is busy
 
 ### Reliability
 
