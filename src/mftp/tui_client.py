@@ -13,7 +13,8 @@ from typing import Optional
 from pubsub import pub
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Container, Vertical, Horizontal
+from textual.containers import Container, Vertical, Horizontal, Center, Middle
+from textual.screen import ModalScreen
 from textual.widgets import (
     Header,
     Footer,
@@ -223,12 +224,7 @@ class FileTransferClient:
         # Ensure download directory exists
         self.download_dir.mkdir(parents=True, exist_ok=True)
 
-        # Check if file already exists
         output_path = self.download_dir / filename
-        if output_path.exists():
-            self._error_log(f"File already exists: {output_path}")
-            return False
-
         self._debug_log(f"Downloading {filename} ({total_chunks} chunks)...")
 
         chunks_data = []
@@ -349,6 +345,58 @@ class FileTransferClient:
         """Send error message to UI."""
         if self.on_error_message:
             self.on_error_message(message)
+
+
+class ConfirmOverwriteScreen(ModalScreen[bool]):
+    """Modal dialog to confirm file overwrite."""
+
+    CSS = """
+    ConfirmOverwriteScreen {
+        align: center middle;
+    }
+
+    #dialog {
+        width: 60;
+        height: 11;
+        border: thick $background 80%;
+        background: $surface;
+        padding: 1 2;
+    }
+
+    #question {
+        height: 3;
+        content-align: center middle;
+        text-style: bold;
+    }
+
+    #button-container {
+        height: auto;
+        align: center middle;
+        margin-top: 1;
+    }
+
+    #button-container Button {
+        margin: 0 2;
+    }
+    """
+
+    def __init__(self, filename: str):
+        super().__init__()
+        self.filename = filename
+
+    def compose(self) -> ComposeResult:
+        with Container(id="dialog"):
+            yield Static(f"File '{self.filename}' already exists.", id="question")
+            yield Static("Do you want to overwrite it?", id="question")
+            with Container(id="button-container"):
+                yield Button("Overwrite", variant="error", id="overwrite-btn")
+                yield Button("Cancel", variant="primary", id="cancel-btn")
+
+    async def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "overwrite-btn":
+            self.dismiss(True)
+        else:
+            self.dismiss(False)
 
 
 class MFTPClientApp(App):
@@ -644,19 +692,31 @@ class MFTPClientApp(App):
         if self.downloading:
             self.add_error_log("Download already in progress")
             return
-
+        
         table = self.query_one("#file-table", DataTable)
         if table.cursor_row is None or table.cursor_row < 0:
             self.add_error_log("Please select a file to download")
             return
-
+        
         if table.cursor_row >= len(self.client.file_list):
             self.add_error_log("Invalid file selection")
             return
-
+        
         file_info = self.client.file_list[table.cursor_row]
         filename = file_info["name"]
         total_chunks = file_info["chunks"]
+        
+        # Check if file already exists
+        output_path = self.client.download_dir / filename
+        if output_path.exists():
+            # Show confirmation dialog
+            overwrite = await self.push_screen_wait(ConfirmOverwriteScreen(filename))
+            if not overwrite:
+                self.add_debug_log(f"Download cancelled: {filename}")
+                return
+            # Delete the existing file
+            output_path.unlink()
+            self.add_debug_log(f"Overwriting existing file: {filename}")
 
         # Show progress bar
         progress_container = self.query_one("#progress-container")
