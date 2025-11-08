@@ -81,7 +81,9 @@ class MeshtasticConnection:
         # Discover BLE devices
         try:
             ble_devices = await BleakScanner.discover(timeout=5.0)
-            for device in ble_devices:
+            # Sort by signal strength (RSSI) - strongest first (highest/least negative value)
+            sorted_ble = sorted(ble_devices, key=lambda d: d.rssi if d.rssi else -999, reverse=True)
+            for device in sorted_ble:
                 # Show all BLE devices with names (more permissive filtering)
                 # Some Meshtastic devices may not have "mesh" in their name
                 if device.name:
@@ -307,8 +309,10 @@ class DeviceSelectionApp(App):
 
         try:
             ble_devices = await BleakScanner.discover(timeout=5.0)
+            # Sort by signal strength (RSSI) - strongest first (highest/least negative value)
+            sorted_ble = sorted(ble_devices, key=lambda d: d.rssi if d.rssi else -999, reverse=True)
             ble_count = 0
-            for ble_device in ble_devices:
+            for ble_device in sorted_ble:
                 if ble_device.name:
                     device = DeviceInfo(
                         name=ble_device.name,
