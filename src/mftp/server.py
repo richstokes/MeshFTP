@@ -316,7 +316,7 @@ def main():
         my_node_id = mesh.interface.myInfo.my_node_num
         my_node_id_hex = f"{my_node_id:08x}"
         logger.info(f"Server Node ID: !{my_node_id_hex}")
-        logger.info(f"Connect a client with: mftp-client -s {my_node_id_hex}")
+        logger.info(f"Connect a client with: uv run mftp-client -s {my_node_id_hex}")
 
         logger.info("MFTP Server is listening for file requests")
         logger.info("Commands: !ls, !req <filename> <chunk>, !check <filename>")

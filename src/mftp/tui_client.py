@@ -357,16 +357,17 @@ class ConfirmOverwriteScreen(ModalScreen[bool]):
 
     #dialog {
         width: 60;
-        height: 11;
+        height: 9;
         border: thick $background 80%;
         background: $surface;
         padding: 1 2;
     }
 
     #question {
-        height: 3;
+        height: auto;
         content-align: center middle;
         text-style: bold;
+        margin-bottom: 1;
     }
 
     #button-container {
@@ -386,8 +387,7 @@ class ConfirmOverwriteScreen(ModalScreen[bool]):
 
     def compose(self) -> ComposeResult:
         with Container(id="dialog"):
-            yield Static(f"File '{self.filename}' already exists.", id="question")
-            yield Static("Do you want to overwrite it?", id="question")
+            yield Static(f"File '{self.filename}' already exists.\nDo you want to overwrite it?", id="question")
             with Container(id="button-container"):
                 yield Button("Overwrite", variant="error", id="overwrite-btn")
                 yield Button("Cancel", variant="primary", id="cancel-btn")
@@ -687,6 +687,46 @@ class MFTPClientApp(App):
         self.status_text = "Refreshing file list..."
         self.client.request_file_list()
 
+    def _start_download(self, filename: str, total_chunks: int) -> None:
+        """Start the actual download process."""
+        # Run download in a worker to avoid blocking
+        self.run_worker(self._do_download(filename, total_chunks), exclusive=True)
+    
+    async def _do_download(self, filename: str, total_chunks: int) -> None:
+        """Perform the download (runs in worker)."""
+        # Show progress bar
+        progress_container = self.query_one("#progress-container")
+        progress_container.display = True
+        
+        progress_bar = self.query_one("#progress-bar", ProgressBar)
+        progress_bar.update(total=total_chunks, progress=0)
+        self.refresh()  # Force refresh to show the bar
+        
+        progress_label = self.query_one("#progress-label", Label)
+        progress_label.update(f"Downloading: {filename}")
+        
+        self.progress_total = total_chunks
+        self.progress_current = 0
+        self.downloading = True
+        self.status_text = f"Downloading {filename}..."
+        
+        # Start download
+        self.add_debug_log(f"Starting download: {filename}")
+        success = await self.client.download_file_async(filename, total_chunks)
+        
+        self.downloading = False
+        
+        if success:
+            self.status_text = f"✅ Downloaded: {filename}"
+            self.add_debug_log(f"[bold green]Download complete: {filename}[/bold green]")
+        else:
+            self.status_text = f"✗ Download failed: {filename}"
+            self.add_error_log(f"Download failed: {filename}")
+        
+        # Hide progress bar after a delay
+        await asyncio.sleep(2)
+        progress_container.display = False
+    
     async def action_download(self) -> None:
         """Download the selected file."""
         if self.downloading:
@@ -709,49 +749,22 @@ class MFTPClientApp(App):
         # Check if file already exists
         output_path = self.client.download_dir / filename
         if output_path.exists():
-            # Show confirmation dialog
-            overwrite = await self.push_screen_wait(ConfirmOverwriteScreen(filename))
-            if not overwrite:
-                self.add_debug_log(f"Download cancelled: {filename}")
-                return
-            # Delete the existing file
-            output_path.unlink()
-            self.add_debug_log(f"Overwriting existing file: {filename}")
-
-        # Show progress bar
-        progress_container = self.query_one("#progress-container")
-        progress_container.display = True
-
-        progress_bar = self.query_one("#progress-bar", ProgressBar)
-        progress_bar.update(total=total_chunks, progress=0)
-        self.refresh()  # Force refresh to show the bar
-
-        progress_label = self.query_one("#progress-label", Label)
-        progress_label.update(f"Downloading: {filename}")
-
-        self.progress_total = total_chunks
-        self.progress_current = 0
-        self.downloading = True
-        self.status_text = f"Downloading {filename}..."
-
-        # Start download
-        self.add_debug_log(f"Starting download: {filename}")
-        success = await self.client.download_file_async(filename, total_chunks)
-
-        self.downloading = False
-
-        if success:
-            self.status_text = f"✅ Downloaded: {filename}"
-            self.add_debug_log(
-                f"[bold green]Download complete: {filename}[/bold green]"
-            )
-        else:
-            self.status_text = f"✗ Download failed: {filename}"
-            self.add_error_log(f"Download failed: {filename}")
-
-        # Hide progress bar after a delay
-        await asyncio.sleep(2)
-        progress_container.display = False
+            # Show confirmation dialog with callback
+            def handle_overwrite_result(overwrite: bool) -> None:
+                if overwrite:
+                    # Delete the existing file
+                    output_path.unlink()
+                    self.add_debug_log(f"Overwriting existing file: {filename}")
+                    # Start download
+                    self._start_download(filename, total_chunks)
+                else:
+                    self.add_debug_log(f"Download cancelled: {filename}")
+            
+            self.push_screen(ConfirmOverwriteScreen(filename), handle_overwrite_result)
+            return
+        
+        # File doesn't exist, start download directly
+        self._start_download(filename, total_chunks)
 
     def action_quit(self) -> None:
         """Quit the application."""
