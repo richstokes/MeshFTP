@@ -131,11 +131,11 @@ class FileTransferClient:
 
         Returns:
             Delay in seconds based on channel utilization:
-            - 0-10%: 2 seconds
-            - 10-25%: 5 seconds
-            - 25-50%: 10 seconds
-            - 50-75%: 30 seconds
-            - 75%+: 60 seconds
+            - < 10%: 2 seconds
+            - 10-24%: 5 seconds
+            - 25-49%: 10 seconds
+            - 50-74%: 30 seconds
+            - >= 75%: 60 seconds
         """
         ch_util = self.channel_utilization
 
