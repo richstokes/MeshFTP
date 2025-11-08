@@ -272,8 +272,16 @@ class DeviceSelectionApp(App):
 
     async def on_mount(self) -> None:
         """Called when app is mounted."""
-        # Give UI time to render before scanning
-        await asyncio.sleep(0.1)
+        # Update status to show we're about to scan
+        status = self.query_one("#status", Static)
+        status.update("🔍 Preparing to scan...")
+
+        # Force a refresh and yield to the event loop to ensure UI renders
+        self.refresh()
+        await asyncio.sleep(0)  # Yield to event loop
+        await asyncio.sleep(0.1)  # Give a moment for rendering
+
+        # Now start the scan
         await self.refresh_devices()
 
     async def refresh_devices(self) -> None:
