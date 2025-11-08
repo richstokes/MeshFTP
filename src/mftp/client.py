@@ -35,11 +35,12 @@ from mftp.common import MeshtasticConnection, select_device
 CHUNK_TIMEOUT = 30
 
 # Exponential backoff configuration (seconds)
+BASE_BACKOFF = 3  # Base backoff time in seconds (larger for mesh networks)
 MAX_BACKOFF = 30  # Maximum backoff time in seconds
 
 
 def calculate_backoff(retry_count: int) -> float:
-    """Calculate exponential backoff time with jitter.
+    """Calculate exponential backoff time with jitter for congested mesh networks.
 
     Args:
         retry_count: Current retry attempt (0-indexed)
@@ -47,10 +48,11 @@ def calculate_backoff(retry_count: int) -> float:
     Returns:
         Backoff time in seconds, capped at MAX_BACKOFF (30 seconds)
     """
-    # Exponential backoff: 2^retry_count seconds
-    backoff = min(2**retry_count, MAX_BACKOFF)
-    # Add jitter: randomize between 0 and backoff time
-    return random.uniform(0, backoff)
+    # Exponential backoff with larger base: BASE_BACKOFF * (2^retry_count) seconds
+    backoff = min(BASE_BACKOFF * (2**retry_count), MAX_BACKOFF)
+    # Add jitter: randomize between 50% and 100% of backoff time
+    # This ensures minimum wait while still preventing thundering herd
+    return random.uniform(backoff * 0.5, backoff)
 
 
 class FileTransferClient:
