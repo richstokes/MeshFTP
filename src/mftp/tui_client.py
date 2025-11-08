@@ -372,12 +372,14 @@ class ConfirmOverwriteScreen(ModalScreen[bool]):
 
     #button-container {
         height: auto;
+        layout: horizontal;
         align: center middle;
         margin-top: 1;
     }
 
     #button-container Button {
-        margin: 0 2;
+        margin: 0 1;
+        min-width: 16;
     }
     """
 
@@ -389,8 +391,8 @@ class ConfirmOverwriteScreen(ModalScreen[bool]):
         with Container(id="dialog"):
             yield Static(f"File '{self.filename}' already exists.\nDo you want to overwrite it?", id="question")
             with Container(id="button-container"):
-                yield Button("Overwrite", variant="error", id="overwrite-btn")
                 yield Button("Cancel", variant="primary", id="cancel-btn")
+                yield Button("Overwrite", variant="error", id="overwrite-btn")
 
     async def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "overwrite-btn":
