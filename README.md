@@ -154,23 +154,20 @@ MFTP uses Meshtastic direct messages with a simple command protocol:
 
 ### Network Constraints
 
-- **DM payload size**: ~200 bytes maximum
-  - Meshtastic limitation for direct messages
-  - Affects chunk size and file list capacity
-  
 - **Transfer speed**: Very slow
   - Meshtastic has low bitrate (LoRa is long-range, not high-speed)
   - Mesh network adds latency for multi-hop routes
   - Expect minutes for small files, longer for large files
 
 - **Sequential chunks only**:
-  - Chunks must be downloaded in order
-  - No parallel chunk downloads
-  - No chunk priority/reordering
+  - No parallel chunk download
+
+- **Contention**:
+  - MeshFTP automatically watches ChUtil and slows down when the network is busys
 
 ### Reliability
 
-- **Retry logic**: 5 attempts per chunk with 30-second timeout and exponential backoff
+- **Retry logic**: 10 attempts per chunk with 30-second timeout and exponential backoff
 - **Checksum validation**: MD5 hash verification after download
 - **Packet deduplication**: Handles mesh network rebroadcasts
 - **No guaranteed delivery**: Mesh networks are unreliable
@@ -183,7 +180,7 @@ MFTP uses Meshtastic direct messages with a simple command protocol:
 - **No encryption**: Files transferred in plaintext (base64 encoded). I don't fully understand if/how Meshtastic encrypts DMs so send at your own risk!
 - **No compression**: Files sent as-is, no size optimization - compress your files first
 - **No directory browsing**: Only serves files from one directory
-- **No file deletion**: Server directory is read-only
+- **No file upload/deletion**: Server directory is read-only
 - **No directory refresh**: Files are loaded on server startup only, restart to update
 
 ## Tips
