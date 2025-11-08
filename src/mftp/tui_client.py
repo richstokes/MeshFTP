@@ -31,7 +31,7 @@ from mftp.common import MeshtasticConnection, select_device
 
 
 # Timeout for chunk requests (seconds)
-CHUNK_TIMEOUT = 20
+CHUNK_TIMEOUT = 30
 
 
 class FileTransferClient:
@@ -127,12 +127,12 @@ class FileTransferClient:
 
                 # Handle file list response (JSON)
                 if text.startswith("{"):
-                    self._debug_log(f"Parsing JSON response: {text[:100]}...")
+                    # self._debug_log(f"Parsing JSON response: {text[:100]}...")
                     try:
                         import json
 
                         data = json.loads(text)
-                        self._debug_log(f"JSON parsed, keys: {list(data.keys())}")
+                        # self._debug_log(f"JSON parsed, keys: {list(data.keys())}")
                         if "files" in data:
                             self.file_list = data["files"]
                             self._debug_log(
@@ -389,7 +389,10 @@ class ConfirmOverwriteScreen(ModalScreen[bool]):
 
     def compose(self) -> ComposeResult:
         with Container(id="dialog"):
-            yield Static(f"File '{self.filename}' already exists.\nDo you want to overwrite it?", id="question")
+            yield Static(
+                f"File '{self.filename}' already exists.\nDo you want to overwrite it?",
+                id="question",
+            )
             with Container(id="button-container"):
                 yield Button("Cancel", variant="primary", id="cancel-btn")
                 yield Button("Overwrite", variant="error", id="overwrite-btn")
@@ -403,7 +406,7 @@ class ConfirmOverwriteScreen(ModalScreen[bool]):
 
 class MFTPClientApp(App):
     """Textual TUI for MFTP Client."""
-    
+
     TITLE = "MFTP Client"
 
     CSS = """
@@ -533,7 +536,7 @@ class MFTPClientApp(App):
             status_widget.update(new_status)
         except Exception:
             pass  # Widget might not be mounted yet
-    
+
     def compose(self) -> ComposeResult:
         """Compose the UI."""
         yield Header()
@@ -659,7 +662,11 @@ class MFTPClientApp(App):
 
         def _log():
             log = self.query_one("#debug-log", Log)
-            log.write_line(f"[bold red]{message}[/bold red]")
+            # Use Rich Text object for proper styling in Textual Log widget
+            from rich.text import Text
+
+            error_text = Text(message, style="bold red")
+            log.write(error_text)
 
         self._safe_call(_log)
 
@@ -668,7 +675,15 @@ class MFTPClientApp(App):
     ):
         """Show checksum validation result."""
         if valid:
-            self.add_debug_log(f"[bold green]Checksum valid: {local_hash}[/bold green]")
+            # Use Rich Text object for proper styling
+            from rich.text import Text
+
+            def _log():
+                log = self.query_one("#debug-log", Log)
+                success_text = Text(f"Checksum valid: {local_hash}", style="bold green")
+                log.write(success_text)
+
+            self._safe_call(_log)
         else:
             self.add_error_log(
                 f"Checksum mismatch! Local: {local_hash}, Server: {server_hash}"
@@ -693,61 +708,71 @@ class MFTPClientApp(App):
         """Start the actual download process."""
         # Run download in a worker to avoid blocking
         self.run_worker(self._do_download(filename, total_chunks), exclusive=True)
-    
+
     async def _do_download(self, filename: str, total_chunks: int) -> None:
         """Perform the download (runs in worker)."""
         # Show progress bar
         progress_container = self.query_one("#progress-container")
         progress_container.display = True
-        
+
         progress_bar = self.query_one("#progress-bar", ProgressBar)
         progress_bar.update(total=total_chunks, progress=0)
         self.refresh()  # Force refresh to show the bar
-        
+
         progress_label = self.query_one("#progress-label", Label)
         progress_label.update(f"Downloading: {filename}")
-        
+
         self.progress_total = total_chunks
         self.progress_current = 0
         self.downloading = True
         self.status_text = f"Downloading {filename}..."
-        
+
         # Start download
         self.add_debug_log(f"Starting download: {filename}")
         success = await self.client.download_file_async(filename, total_chunks)
-        
+
         self.downloading = False
-        
+
         if success:
             self.status_text = f"✅ Downloaded: {filename}"
-            self.add_debug_log(f"[bold green]Download complete: {filename}[/bold green]")
+            # Use Rich Text object for proper styling
+            from rich.text import Text
+
+            def _log():
+                log = self.query_one("#debug-log", Log)
+                success_text = Text(
+                    f"Download complete: {filename}", style="bold green"
+                )
+                log.write(success_text)
+
+            self._safe_call(_log)
         else:
             self.status_text = f"✗ Download failed: {filename}"
             self.add_error_log(f"Download failed: {filename}")
-        
+
         # Hide progress bar after a delay
         await asyncio.sleep(2)
         progress_container.display = False
-    
+
     async def action_download(self) -> None:
         """Download the selected file."""
         if self.downloading:
             self.add_error_log("Download already in progress")
             return
-        
+
         table = self.query_one("#file-table", DataTable)
         if table.cursor_row is None or table.cursor_row < 0:
             self.add_error_log("Please select a file to download")
             return
-        
+
         if table.cursor_row >= len(self.client.file_list):
             self.add_error_log("Invalid file selection")
             return
-        
+
         file_info = self.client.file_list[table.cursor_row]
         filename = file_info["name"]
         total_chunks = file_info["chunks"]
-        
+
         # Check if file already exists
         output_path = self.client.download_dir / filename
         if output_path.exists():
@@ -761,10 +786,10 @@ class MFTPClientApp(App):
                     self._start_download(filename, total_chunks)
                 else:
                     self.add_debug_log(f"Download cancelled: {filename}")
-            
+
             self.push_screen(ConfirmOverwriteScreen(filename), handle_overwrite_result)
             return
-        
+
         # File doesn't exist, start download directly
         self._start_download(filename, total_chunks)
 
@@ -810,6 +835,24 @@ async def main_async():
 
     # Setup download directory
     download_dir = Path(args.directory)
+
+    # Check if download directory exists, create if it doesn't
+    try:
+        if not download_dir.exists():
+            print(f"Download directory '{download_dir}' does not exist. Creating it...")
+            download_dir.mkdir(parents=True, exist_ok=True)
+            print(f"✓ Created download directory: {download_dir}")
+        elif not download_dir.is_dir():
+            print(f"Error: '{download_dir}' exists but is not a directory.")
+            sys.exit(1)
+        else:
+            print(f"✓ Using existing download directory: {download_dir}")
+    except PermissionError:
+        print(f"Error: Permission denied when accessing '{download_dir}'.")
+        sys.exit(1)
+    except Exception as e:
+        print(f"Error: Failed to create download directory '{download_dir}': {e}")
+        sys.exit(1)
 
     print("MFTP TUI Client - Meshtastic File Transfer Protocol")
     print("=" * 50)
