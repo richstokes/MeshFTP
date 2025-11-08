@@ -768,44 +768,54 @@ class MFTPClientApp(App):
 
     async def _do_download(self, filename: str, total_chunks: int) -> None:
         """Perform the download (runs in worker)."""
-        # Show progress bar
-        progress_container = self.query_one("#progress-container")
-        progress_container.display = True
 
-        progress_bar = self.query_one("#progress-bar", ProgressBar)
-        progress_bar.update(total=total_chunks, progress=0)
-        self.refresh()  # Force refresh to show the bar
+        # Show progress bar (thread-safe)
+        def _show_progress():
+            progress_container = self.query_one("#progress-container")
+            progress_container.display = True
 
-        progress_label = self.query_one("#progress-label", Label)
-        progress_label.update(f"Downloading: {filename}")
+            progress_bar = self.query_one("#progress-bar", ProgressBar)
+            progress_bar.update(total=total_chunks, progress=0)
+            self.refresh()  # Force refresh to show the bar
 
-        self.progress_total = total_chunks
-        self.progress_current = 0
-        self.downloading = True
-        self.status_text = f"Downloading {filename}..."
+            progress_label = self.query_one("#progress-label", Label)
+            progress_label.update(f"Downloading: {filename}")
+
+            self.progress_total = total_chunks
+            self.progress_current = 0
+            self.downloading = True
+            self.status_text = f"Downloading {filename}..."
+
+        self._safe_call(_show_progress)
 
         # Start download
         self.add_debug_log(f"Starting download: {filename}")
         success = await self.client.download_file_async(filename, total_chunks)
 
-        self.downloading = False
+        # Update status after download completes (thread-safe)
+        def _update_status():
+            self.downloading = False
 
-        if success:
-            self.status_text = f"Downloaded: {filename}"
-
-            # Use Rich markup for styling
-            def _log():
+            if success:
+                self.status_text = f"Downloaded: {filename}"
                 log = self.query_one("#debug-log", RichLog)
                 log.write(f"[bold green]Download complete: {filename}[/bold green]")
+            else:
+                self.status_text = f"Download failed: {filename}"
 
-            self._safe_call(_log)
-        else:
-            self.status_text = f"Download failed: {filename}"
+        self._safe_call(_update_status)
+
+        if not success:
             self.add_error_log(f"Download failed: {filename}")
 
-        # Hide progress bar after a delay
+        # Hide progress bar after a delay (thread-safe)
         await asyncio.sleep(2)
-        progress_container.display = False
+
+        def _hide_progress():
+            progress_container = self.query_one("#progress-container")
+            progress_container.display = False
+
+        self._safe_call(_hide_progress)
 
     async def action_download(self) -> None:
         """Download the selected file."""
