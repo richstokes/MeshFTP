@@ -77,6 +77,9 @@ class FileTransferClient:
         # Channel utilization tracking
         self.channel_utilization = 0.0  # Current channel utilization percentage
 
+        # Cancellation flag
+        self.cancel_download = False
+
         # Callback for UI updates
         self.on_file_list_update = None
         self.on_chunk_received = None
@@ -87,6 +90,11 @@ class FileTransferClient:
     def set_loop(self, loop: asyncio.AbstractEventLoop):
         """Provide the asyncio loop so we can set events from other threads safely."""
         self.loop = loop
+
+    def cancel(self):
+        """Cancel the current download."""
+        self.cancel_download = True
+        self._debug_log("Download cancellation requested")
 
     def get_current_channel_utilization(self) -> float:
         """Get current channel utilization from the local node's cached data.
@@ -332,6 +340,9 @@ class FileTransferClient:
         Returns:
             True if download successful, False otherwise.
         """
+        # Reset cancellation flag at start of download
+        self.cancel_download = False
+
         # Ensure download directory exists
         self.download_dir.mkdir(parents=True, exist_ok=True)
 
@@ -341,6 +352,11 @@ class FileTransferClient:
         chunks_data = []
 
         for chunk_num in range(total_chunks):
+            # Check for cancellation
+            if self.cancel_download:
+                self._error_log("Download cancelled by user")
+                return False
+
             self._debug_log(f"Chunk {chunk_num + 1}/{total_chunks}")
 
             # Retry logic with exponential backoff
@@ -630,6 +646,7 @@ class MFTPClientApp(App):
         Binding("q", "quit", "Quit"),
         Binding("r", "refresh", "Refresh"),
         Binding("d", "download", "Download"),
+        Binding("c", "cancel", "Cancel"),
     ]
 
     status_text = reactive("Initializing...")
@@ -685,6 +702,7 @@ class MFTPClientApp(App):
                 yield Container(
                     Button("Refresh List", variant="primary", id="refresh-btn"),
                     Button("Download", variant="success", id="download-btn"),
+                    Button("Cancel", variant="warning", id="cancel-btn"),
                     Button("Quit", variant="error", id="quit-btn"),
                     id="button-container",
                 )
@@ -723,6 +741,10 @@ class MFTPClientApp(App):
         # Hide progress initially
         progress_container = self.query_one("#progress-container")
         progress_container.display = False
+
+        # Hide cancel button initially
+        cancel_btn = self.query_one("#cancel-btn", Button)
+        cancel_btn.display = False
 
         # Request initial file list
         await asyncio.sleep(1)
@@ -845,6 +867,8 @@ class MFTPClientApp(App):
             await self.action_refresh()
         elif event.button.id == "download-btn":
             await self.action_download()
+        elif event.button.id == "cancel-btn":
+            await self.action_cancel()
         elif event.button.id == "quit-btn":
             self.action_quit()
 
@@ -856,6 +880,14 @@ class MFTPClientApp(App):
         self.client.get_current_channel_utilization()
         self.client.request_file_list()
 
+    async def action_cancel(self) -> None:
+        """Cancel the current download."""
+        if self.downloading:
+            self.add_debug_log("Cancelling download...")
+            self.client.cancel()
+        else:
+            self.add_error_log("No download in progress")
+
     def _start_download(self, filename: str, total_chunks: int) -> None:
         """Start the actual download process."""
         # Run download in a worker to avoid blocking
@@ -864,10 +896,16 @@ class MFTPClientApp(App):
     async def _do_download(self, filename: str, total_chunks: int) -> None:
         """Perform the download (runs in worker)."""
 
-        # Show progress bar (thread-safe)
+        # Show progress bar and cancel button, hide download button (thread-safe)
         def _show_progress():
             progress_container = self.query_one("#progress-container")
             progress_container.display = True
+
+            # Show cancel button, hide download button
+            cancel_btn = self.query_one("#cancel-btn", Button)
+            cancel_btn.display = True
+            download_btn = self.query_one("#download-btn", Button)
+            download_btn.display = False
 
             # Initialize custom progress bar
             progress_bar = self.query_one("#progress-bar", Static)
@@ -900,20 +938,28 @@ class MFTPClientApp(App):
                 self.status_text = f"Downloaded: {filename}"
                 log = self.query_one("#debug-log", RichLog)
                 log.write(f"[bold green]Download complete: {filename}[/bold green]")
+            elif self.client.cancel_download:
+                self.status_text = f"Download cancelled: {filename}"
             else:
                 self.status_text = f"Download failed: {filename}"
 
         self._safe_call(_update_status)
 
-        if not success:
+        if not success and not self.client.cancel_download:
             self.add_error_log(f"Download failed: {filename}")
 
-        # Hide progress bar after a delay (thread-safe)
+        # Hide progress bar and cancel button, show download button after a delay (thread-safe)
         await asyncio.sleep(2)
 
         def _hide_progress():
             progress_container = self.query_one("#progress-container")
             progress_container.display = False
+
+            # Hide cancel button, show download button
+            cancel_btn = self.query_one("#cancel-btn", Button)
+            cancel_btn.display = False
+            download_btn = self.query_one("#download-btn", Button)
+            download_btn.display = True
 
         self._safe_call(_hide_progress)
 
