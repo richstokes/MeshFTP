@@ -333,10 +333,25 @@ def main():
 
         # Set up signal handlers for clean shutdown
         shutdown_flag = False
+        shutdown_count = 0
 
         def signal_handler(signum, frame):
-            nonlocal shutdown_flag
-            shutdown_flag = True
+            nonlocal shutdown_flag, shutdown_count
+            shutdown_count += 1
+
+            if shutdown_count == 1:
+                shutdown_flag = True
+                logger.info("\nShutting down server...")
+            elif shutdown_count == 2:
+                logger.warning("\nForce shutdown requested, exiting immediately...")
+                import os
+
+                os._exit(1)
+            else:
+                # Multiple Ctrl+C presses - force exit
+                import os
+
+                os._exit(1)
 
         signal.signal(signal.SIGINT, signal_handler)
         signal.signal(signal.SIGTERM, signal_handler)
@@ -346,32 +361,15 @@ def main():
             while not shutdown_flag:
                 time.sleep(0.1)
         except KeyboardInterrupt:
-            pass
+            logger.info("\nShutting down server...")
         finally:
-            logger.info("Shutting down server...")
             try:
                 pub.unsubscribe(message_handler, "meshtastic.receive.text")
             except Exception as e:
                 logger.debug(f"Error unsubscribing: {e}")
     finally:
-        # Force disconnect with timeout
-        import threading
-
-        disconnect_complete = threading.Event()
-
-        def force_exit_thread():
-            time.sleep(3.0)  # Give 3 seconds for cleanup
-            if not disconnect_complete.is_set():
-                logger.warning("Cleanup timed out, forcing exit...")
-                import os
-
-                os._exit(0)  # Force exit if disconnect hangs
-
-        force_thread = threading.Thread(target=force_exit_thread, daemon=True)
-        force_thread.start()
-
+        # Disconnect with timeout
         mesh.disconnect()
-        disconnect_complete.set()
 
 
 if __name__ == "__main__":

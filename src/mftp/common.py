@@ -156,6 +156,7 @@ class MeshtasticConnection:
         if self.interface:
             import threading
             import time
+            import os
 
             disconnect_complete = threading.Event()
 
@@ -176,6 +177,7 @@ class MeshtasticConnection:
             # Wait for disconnect with timeout
             if not disconnect_complete.wait(timeout=2.0):
                 logger.warning("Disconnect timed out, forcing exit...")
+                os._exit(0)
 
             self.interface = None
             self.device_info = None
