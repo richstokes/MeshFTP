@@ -18,8 +18,8 @@ from mftp.common import MeshtasticConnection, select_device_sync
 # Track processed packet IDs to avoid duplicates
 processed_packets = set()
 
-# Chunk size for file transfer (150 bytes to fit in Meshtastic messages)
-CHUNK_SIZE = 150
+# Chunk size for file transfer (190 bytes to fit in Meshtastic messages)
+CHUNK_SIZE = 190
 
 # Maximum filename length (to fit in message payloads)
 MAX_FILENAME_LENGTH = 10
