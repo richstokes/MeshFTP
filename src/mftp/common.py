@@ -93,15 +93,21 @@ class MeshtasticConnection:
 
         # Discover BLE devices
         try:
+            import re
+
             ble_devices = await BleakScanner.discover(timeout=5.0)
             # Sort by signal strength (RSSI) - strongest first (highest/least negative value)
             sorted_ble = sorted(
                 ble_devices, key=lambda d: d.rssi if d.rssi else -999, reverse=True
             )
+
+            # Pattern: 4 alphanumeric characters, underscore, 4 hex characters
+            # Example: HBP1_a327, DBRS_61c5
+            name_pattern = re.compile(r"^[A-Za-z0-9]{4}_[0-9A-Fa-f]{4}$")
+
             for device in sorted_ble:
-                # Show all BLE devices with names (more permissive filtering)
-                # Some Meshtastic devices may not have "mesh" in their name
-                if device.name:
+                # Only show BLE devices matching the specific format
+                if device.name and name_pattern.match(device.name):
                     devices.append(
                         DeviceInfo(
                             name=device.name,
