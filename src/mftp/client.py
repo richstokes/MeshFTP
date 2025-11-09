@@ -188,7 +188,7 @@ class FileTransferClient:
                     from_num = packet.get("from")
                     if from_num:
                         from_id = f"!{from_num:08x}"
-                        self._debug_log(f"Converted numeric ID {from_num} to {from_id}")
+                        # self._debug_log(f"Converted numeric ID {from_num} to {from_id}")
 
                 if from_id is None:
                     self._debug_log("Skipping packet with None fromId/from")
@@ -199,13 +199,13 @@ class FileTransferClient:
                     from_id if from_id.startswith("!") else f"!{from_id}"
                 )
 
-                self._debug_log(
-                    f"Checking: from={normalized_from_id}, expected={self.server_id}, match={normalized_from_id == self.server_id}"
-                )
+                # self._debug_log(
+                #     f"Checking: from={normalized_from_id}, expected={self.server_id}, match={normalized_from_id == self.server_id}"
+                # )
 
                 # Only process messages from our server
                 if normalized_from_id != self.server_id:
-                    self._debug_log(f"Filtered out (not from server)")
+                    # self._debug_log(f"Filtered out (not from server)")
                     return
 
                 self._debug_log(f"Message from server accepted!")
