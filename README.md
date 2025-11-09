@@ -15,7 +15,7 @@ MeshFTP consists of two components:
 
 Files are chunked, base85-encoded, and transferred over Meshtastic direct messages (DMs) with automatic retry logic and MD5 checksum validation.
 
-MeshFTP is designed for small files due to Meshtastic's low bandwidth and DM size limitations. It is ideal for sharing text files, small images, or configuration files in remote areas without internet access. 
+MeshFTP is designed for small files due to Meshtastic's low bandwidth and DM size limitations. It is ideal for sharing text files, small images, or configuration files in remote areas without internet access.
 
 Be kind, remember everyone's bandwidth is limited and transferring large files may impact other users on the mesh. That said, MeshFTP monitors channel utilization and will automatically back off when the network is busy.
 
